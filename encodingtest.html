@@ -1,0 +1,559 @@
+<!doctype html>
+<head>
+<meta charset="UTF-8">
+<title>js charset encoding test</title>
+<script src="http://code.jquery.com/jquery-1.11.0.min.js"></script>
+<script type="text/javascript" src="./utils.js"></script>
+<!-- Character Encoding -->
+<script type="text/javascript" src="./encoding.js"></script>
+<script type="text/javascript" src="./ecl.js"></script>
+<script type="text/javascript" src="./ecl_array.js"></script>
+
+<script type="text/javascript">
+//<![CDATA[
+var debug;
+
+(function() {
+	var to_u8array = function(array) {
+		if (typeof Uint8Array === 'undefined') {return array;}
+		var i,il=array.length,u8arr = Uint8Array(il);
+		for(i=0;i<il;i++) {u8arr[i] = array[i];}
+		return u8arr;
+	};
+	var from_u8array = function(u8array, to) {
+		if (typeof Uint8Array === 'undefined') {return u8array;}
+		var i,il=u8array.length,arr = [];
+		for(i=0;i<il;i++) {arr[i] = u8array[i];}
+		return (to==null) ? arr : Utils.ByteArray["to"+to](arr);
+	};
+	Utils.ByteArray.toUint8Array = to_u8array;
+	Utils.ByteArray.fromUint8Array = from_u8array;
+	var to_binary = function(array) {
+		var i,il=array.length,bstr="";
+		for(i=0;i<il;i++) {bstr += String.fromCharCode(array[i]);}
+		return bstr;
+	};
+	var from_binary = function(bstr,to) {
+		var i,il=bstr.length,array=[];
+		for(i=0;i<il;i++) {array.push( bstr.charCodeAt(i) );}
+		return (to==null) ? array : Utils.ByteArray["to"+to](array);
+	};
+	Utils.ByteArray.toBinary = to_binary;
+	Utils.ByteArray.fromBinary = from_binary;
+})();
+
+/** encoding.js
+ *
+ * @example
+ *   Encoding.convert(utf8Array, 'SJIS', 'UTF8');
+ *
+ * Available Encodings:
+ *  - 'UTF32'   (detect only)
+ *  - 'UTF16'   (detect only)
+ *  - 'BINARY'  (detect only)
+ *  - 'ASCII'   (detect only)
+ *  - 'JIS'
+ *  - 'UTF8'
+ *  - 'EUCJP'
+ *  - 'SJIS'
+ *  - 'UNICODE' (JavaScript Unicode String/Array)
+ */
+/** ecl.js
+ * EscapeSJIS(), UnescapeSJIS(),
+ * 
+ * SJIS,EUCJP,JIS7,JIS8,Unicode,UTF7,UTF8,UTF16LE
+ */
+var CharsetNames = {
+// label    : ecl.js, encoding.js, ecl_array.js
+	'SJIS'    : ['SJIS', 'SJIS', 'SJIS'],
+	'EUC-JP'  : ['EUCJP', 'EUCJP', 'EUCJP'],
+	'JIS'     : ['JIS7', 'JIS', 'JIS7'],
+	'UTF-8'   : ['UTF8', 'UTF8', 'UTF8'],
+	'UNICODE' : ['Unicode', 'UNICODE', 'Unicode']
+}
+var convert = function(text, toCharset, fromCharset, dumptypeTo, dumptypeFrom) {
+	var array,out_array,enclib;
+	if(!dumptypeFrom) {dumptypeFrom='Binary';}
+	if(!dumptypeTo) {dumptypeTo='Hex';}
+	enclib = $("input[name=\"enclib\"]:checked").val(); //0:ecl.js, 1:encoding.js, 2:ecl_array.js
+	return convert_with(enclib, text, toCharset, fromCharset, dumptypeTo, dumptypeFrom);
+};
+
+var convert_with = function(enclib, text, toCharset, fromCharset, dumptypeTo, dumptypeFrom) {
+	var from = CharsetNames[fromCharset][enclib],
+			to   = CharsetNames[toCharset][enclib],
+			in_array = [],
+			out_array = [];
+	if (fromCharset===toCharset) {
+		return dumptypeTo==dumptypeFrom ? text : Utils.ByteArray["to"+dumptypeTo](Utils.ByteArray["from"+dumptypeFrom](text));
+	}
+	//console.debug("from:"+from+", to:"+to);
+	if (enclib==0) { //"ecl.js"
+		var t=text;
+		if (from !=='Unicode') {
+			in_array = Utils.ByteArray["from"+dumptypeFrom](text);
+			t = window["Unescape"+from]((EscapeUnicode(Utils.ByteArray.toBinary(in_array))));
+		}
+		if (to !== 'Unicode') {
+			t = UnescapeUnicode(window["Escape"+to](t));
+		}
+		out_array = Utils.ByteArray.fromBinary(t);
+	} else if (enclib==1) { //"encoding.js"
+		in_array = Utils.ByteArray["from"+dumptypeFrom](text);
+		out_array = Encoding.convert(in_array, to, from);
+	} else if (enclib==2) { //"ecl_array.js"
+		in_array = Utils.ByteArray["from"+dumptypeFrom](text);
+		//in_array = Utils.ByteArray["from"+dumptypeFrom](text);
+		//out_array = ECL["to"+to+"Array"](ECL["from"+from+"Array"](in_array));
+		//out_array = ECL.charset[to].parse(ECL.charset[from].stringify(in_array));
+		out_array = ECL.convert_array(in_array, to, from);
+	} else if (enclib==3) { // native
+		if ((fromCharset=='UNICODE' || fromCharset=='UTF-8') && (toCharset=='UNICODE' || toCharset=='UTF-8')) {
+			text = fromCharset=='UNICODE' ? unescape(encodeURIComponent(text)) : decodeURIComponent(escape(text));
+			if (dumptypeTo=='Binary') {
+				return text;
+			} else {
+				out_array = Utils.ByteArray.fromText(text);
+			}
+		} else {
+			return "(ERROR:not supported charset conversion["+fromCharset+"=>"+toCharset+"])"; 
+		}
+		
+	}
+	//console.debug("out:"+out_array.join(","));
+	return Utils.ByteArray["to"+dumptypeTo](out_array);
+};
+
+var click_convert = function(toCharset) {
+	var fromCharset = $("#tacharset").val();
+	fromCharset = (fromCharset==="") ? 'UNICODE' : fromCharset;
+	var dumptypeTo   = $("input[name='ta2dump']:checked").val();
+	var dumptypeFrom = $("input[name='tadump']:checked").val();
+	
+	var encoded, iter = $("#iter").val(), i, timer = new Utils.Timer(),msec=0;
+	timer.start();
+	for(i=0; i<iter; i++) {
+		encoded = convert($("#ta").val(), toCharset, fromCharset, dumptypeTo, dumptypeFrom);
+	}
+	timer.stop();
+	msec = timer.getTime();
+	$("#tastat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps)");
+	
+	$("#tacharset").val(fromCharset);
+	$("#ta2charset").val(toCharset);
+	$("#ta2").val(encoded);
+};
+var click_convert2 = function(toCharset) {
+	var fromCharset = $("#ta2charset").val();
+	fromCharset = (fromCharset==="") ? 'UNICODE' : fromCharset;
+	var dumptypeTo   = $("input[name='tadump']:checked").val();
+	var dumptypeFrom = $("input[name='ta2dump']:checked").val();
+
+	var encoded, iter = $("#iter").val(), i, timer = new Utils.Timer(),msec=0;
+	timer.start();
+	for(i=0; i<iter; i++) {
+		encoded = convert($("#ta2").val(), toCharset, fromCharset, dumptypeTo, dumptypeFrom);
+	}
+	timer.stop();
+	msec = timer.getTime();
+	$("#ta2stat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps)");
+
+	$("#tacharset").val(toCharset);
+	$("#ta2charset").val(fromCharset);
+	$("#ta").val(encoded);
+};
+
+var urlescape = function(text, toCharset) {
+	if (toCharset==null) {return encodeURIComponent(text);}
+	var enclib = $("input[name=\"enclib\"]:checked").val(),
+			to = CharsetNames[toCharset][enclib], //0:ecl.js, 1:encoding.js, 2:ecl_array.js, 3:native
+			escaped="",arr;
+	if (enclib==0) {
+		escaped = window["Escape"+to](text);
+	} else if (enclib==1) {
+		arr = Utils.ByteArray.fromBinary(text);
+		arr = to=='UNICODE' ? arr : Encoding.convert(arr,to,'UNICODE')
+//		console.debug("arr:"+arr);
+		escaped = Encoding.urlEncode(arr);
+	} else if (enclib==2) {
+		escaped = (to=='Unicode') ? ECL.escape(text) : ECL.encodeURIComponent(text,to);
+	} else if (enclib==3) {
+		if (toCharset=='UTF-8') {
+			escaped = encodeURIComponent(text);
+		} else {
+			escaped = "(ERROR:not supported charset encodeURI["+toCharset+"])";
+		}
+	}
+	return escaped;
+};
+var urlunescape = function(text, fromCharset) {
+	if (fromCharset==null) {return decodeURIComponent(text);}
+	var enclib = $("input[name=\"enclib\"]:checked").val(),
+			from = CharsetNames[fromCharset][enclib], //0:ecl.js, 1:encoding.js, 2:ecl_array.js, 3:native
+			unescaped="",arr;
+	if (enclib==0) {
+		unescaped = window["Unescape"+from](text);
+	} else if (enclib==1) {
+		arr = Encoding.urlDecode(text);
+		arr = from=='UNICODE' ? arr : Encoding.convert(arr,'UNICODE',from)
+//		console.debug("arr:"+arr);
+		unescaped = Encoding.codeToString(arr);
+	} else if (enclib==2) {
+		//unescaped = ECL.charset[from].stringify(from=='Unicode' ? ECL.enc.Unicode.unescape(text) : ECL.enc.URI.unescape(text));
+		unescaped = from=='Unicode' ? ECL.unescape(text) : ECL.decodeURIComponent(text,from);
+	} else if (enclib==3) {
+		if (fromCharset=='UTF-8') {
+			unescaped = decodeURIComponent(text);
+		} else {
+			unescaped = "(ERROR:not supported charset decodeURI["+fromCharset+"])";
+		}
+	}
+	return unescaped;
+};
+var click_escape = function(toCharset) {
+	var encoded, iter = $("#iter").val(), i, timer = new Utils.Timer(),msec=0;
+	timer.start();
+	for(i=0; i<iter; i++) {
+		encoded = urlescape($("#ta3").val(), toCharset);
+	}
+	timer.stop();
+	msec = timer.getTime();
+	$("#ta3stat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps)");
+	
+	$("#ta4charset").val(toCharset);
+	$("#ta4").val(encoded);
+};
+var click_unescape = function(toCharset) {
+	var fromCharset = $("#ta4charset").val();
+	fromCharset = (fromCharset==="") ? 'UNICODE' : fromCharset;
+
+	var encoded, iter = $("#iter").val(), i, timer = new Utils.Timer(),msec=0;
+	timer.start();
+	for(i=0; i<iter; i++) {
+		encoded = urlunescape($("#ta4").val(), fromCharset);
+	}
+	timer.stop();
+	msec = timer.getTime();
+	$("#ta4stat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps)");
+
+	$("#ta3").val(encoded);
+};
+
+var setSample = function() {
+	$("#ta").val($("body").text());
+	$("#ta3").val($("body").text());
+	return;
+};
+
+$(function(){
+	if ($("#ta").val()=="") {setSample();}
+});
+//-->
+</script>
+<style type="text/css">
+<!--
+pre.code {
+	color:#000;
+	background-color:#EFEFEF;
+	font-family:monospace;
+	margin:4px;
+	padding:4px;
+	border:1px solid #999;
+}
+span.comment {
+	color:#090;
+}
+td{text-align:right;}
+tr.column>td{background-color:#CCF;font-weight:bold;text-align:center;}
+td.libname{font-family:monospace;}
+td.invalid {color:#000;background-color:#CCC;}
+td.fast {color:#F00;font-weight:bold;}
+td.failed{text-decoration:line-through}
+td.slow {color:#00C;}
+dd {margin-bottom: 10px;}
+-->
+</style>
+</head>
+<body>
+
+<h1>文字コード変換テスト</h1>
+<h2>概要</h2>
+<p>
+javascriptの文字列はUTF-16で String#charCodeAt(i) で取得出来る数値は2byte(0x0000から0xffff)になる。
+escape(&quot;あ&quot;) は UTF-16がそのままエスケープされ &quot;%u3042&quot; になるが
+encodeURI(&quot;あ&quot;),encodeURIComponent(&quot;あ&quot;) などではUTF-8に変換されて &quot;%E3%81%82&quot; になる。
+</p>
+<blockquote><pre class="code">var str = &quot;文字列をUTF-8に&quot;;
+var utf8str = unescape(encodeURIComponent(str));
+var utf16str = decodeURIComponent(escape(utf8str));
+if (str == utf16str) {alert(true);} <span class="comment">//=&gt; true</span>
+</pre></blockquote>
+<p>
+とすることで UTF-16&lt;=&gt;UTF-8 の変換は出来るが、その他の文字コードは変換テーブルを用意する必要がある。
+Shift_JIS(MS932), EUC-JP, UTF-8, JIS(iso-2022-jp)に対応したライブラリを2つ見つけたので検証する。
+</p>
+
+<ol>
+<li>Encoding.js - Converts character encoding. <a href="http://polygon-planet-log.blogspot.jp/2012/04/javascript.html">http://polygon-planet-log.blogspot.jp/2012/04/javascript.html</a></li>
+<li> Escape Codec Library: ecl.js (Ver.041208) <a href="http://www.junoe.jp/downloads/itoh/enc_js.shtml">http://www.junoe.jp/downloads/itoh/enc_js.shtml</a> または <a href="http://www.vector.co.jp/soft/other/java/se342855.html">http://www.vector.co.jp/soft/other/java/se342855.html</a></li>
+</ol>
+
+<h2>検証</h2>
+<h3>環境</h3>
+<pre>OS: Windows7 Professional 64bit
+ブラウザ: Firefox 27.0
+</pre>
+<p>
+ecl.jsは各文字コードへURLエスケープする為のライブラリであって、直接文字コード変換する機能はない。
+よって UNICODE(Javascript文字列) から SJIS へ変換する場合は
+</p>
+<blockquote><pre class="code">
+var str = &quot;UNICODE文字列をシフトJISへ&quot;;
+var sjis = UnescapeUnicode(EscapeSJIS(str));
+var str2 = UnescapeSJIS(EscapeUnicode(sjis));
+if (str==str2){alert(&quot;true&quot;);} <span class="comment">//=> true</span>
+</pre></blockquote>
+<p>
+のようにする必要がある。
+</p>
+<p>
+ecl.jsのUNICODE&lt;-&gt;JIS変換テーブルを使ってJS文字列から各文字コードの配列に変換する関数を追加した <a href="./ecl_array.js">ecl_array.js</a> を作成した。
+URLエスケープの処理を省くことで変換の高速化をすると共に、配列に変換することで他のライブラリで利用しやすくなる。
+</p>
+<blockquote><pre class="code">
+var str = &quot;あいうえお&quot;;
+<span class="comment">// 文字列を16bit数値の列に変換</span>
+var array = ECL.charset.Unicode.parse(str);   <span class="comment">//=> [12354, 12356, 12358, 12360, 12362]</span>
+ECL.convert_array(array, "SJIS");    <span class="comment">//=> [130, 160, 130, 162, 130, 164, 130, 166, 130, 168]</span>
+ECL.convert_array(array, "EUCJP");   <span class="comment">//=> [164, 162, 164, 164, 164, 166, 164, 168, 164, 170]</span>
+ECL.convert_array(array, "JIS7");    <span class="comment">//=> [36, 34, 36, 36, 36, 38, 36, 40, 36, 42]</span>
+ECL.convert_array(array, "UTF8");    <span class="comment">//=> [227, 129, 130, 227, 129, 132, 227, 129, 134, 227, 129, 136, 227, 129, 138]</span>
+ECL.convert_array(array, "UTF16LE"); <span class="comment">//=> [66, 48, 68, 48, 70, 48, 72, 48, 74, 48]</span>
+ECL.convert_array(array, "UTF16BE"); <span class="comment">//=> [48, 66, 48, 68, 48, 70, 48, 72, 48, 74]</span>
+
+<span class="comment">// 配列からJS文字列(Unicode)に戻す場合は ECL.charset.Unicode.stringify( array )</span>
+ECL.charset.Unicode.stringify( array ); <span class="comment">//=> &quot;あいうえお&quot;</span>
+
+<span class="comment">// UTF-8文字列からSJIS文字列へ</span>
+var utf8str = unescape(encodeURIComponent(&quot;あいうえお&quot;));
+var sjisstr = ECL.convert(utf8str, 'SJIS', 'UTF8');
+sjisstr == &quot;\x82\xA0\x82\xA2\x82\xA4\x82\xA6\x82\xA8&quot;; <span class="comment">//=> true</span>
+
+<span class="comment">/*
+ 例: ecl_array.js と CryptoJS を使いSJISテキストの暗号文・Base64・SHA1ハッシュを作る
+    CryptoJS : https://code.google.com/p/crypto-js/
+*/</span>
+var msg = &quot;あいうえお&quot;;
+var sjis = ECL.convert(msg, 'SJIS');
+var sjis_wordarray = CryptoJS.enc.Latin1.parse( sjis ); <span class="comment">// CryptoJSではWordArrayオブジェクトを作りデータをやりとりするのが楽</span>
+var encrypted = CryptoJS.AES.encrypt(sjis_wordarray, &quot;Secret Passphrase&quot;); <span class="comment">//=> [object]</span>
+var base64 = sjis_wordarray.toString(CryptoJS.enc.Base64); <span class="comment">//=> &quot;gqCCooKkgqaCqA==&quot;</span>
+var sha1 = CryptoJS.SHA1(sjis_wordarray).toString(CryptoJS.enc.Hex); <span class="comment">//=> &quot;2c332e42c55ba9293827672e85f16f1cda65518e&quot;</span>
+
+</pre></blockquote>
+
+<h3>実験結果</h3>
+<dl>
+<dt>4KBのテキストを1000回文字コード変換した時の処理秒数(ms)  U : UNICODE, S : SJIS, 8 : UTF8, E : EUC-JP, J : JIS</dt>
+<dd>
+<table border="1">
+<tr class="column">
+	<td>ライブラリ</td>
+	<td class="invalid">U-&gt;U</td><td>U-&gt;S</td><td>U-&gt;8</td><td>U-&gt;E</td><td>U-&gt;J</td>
+	<td>S-&gt;U</td><td class="invalid">S-&gt;S</td><td>S-&gt;8</td><td>S-&gt;E</td><td>S-&gt;J</td>
+	<td>8-&gt;U</td><td>8-&gt;S</td><td class="invalid">8-&gt;8</td><td>8-&gt;E</td><td>8-&gt;J</td>
+	<td>E-&gt;U</td><td>E-&gt;S</td><td>E-&gt;8</td><td class="invalid">E-&gt;E</td><td>E-&gt;J</td>
+	<td>J-&gt;U</td><td>J-&gt;S</td><td>J-&gt;8</td><td>J-&gt;E</td><td class="invalid">J-&gt;J</td>
+</tr>
+<tr>
+	<td class="libname">encoding.js</td>
+	<td class="invalid">159</td><td class="fast">495</td><td>336</td><td class="fast">507</td><td class="fast">503</td>
+	<td class="fast">278</td><td class="invalid">146</td><td class="fast">203</td><td class="fast">214</td><td class="fast">229</td>
+	<td class="fast">195</td><td class="fast">338</td><td class="invalid">129</td><td class="fast">347</td><td class="fast">345</td>
+	<td class="fast">255</td><td class="fast">223</td><td class="fast">213</td><td class="invalid">146</td><td class="fast">230</td>
+	<td class="fast">277</td><td class="fast">217</td><td class="fast">247</td><td class="fast">209</td><td class="invalid">146</td>
+</tr>
+<tr>
+	<td class="libname">ecl.js</td>
+	<td class="invalid">132</td><td class="slow">1551</td><td class="slow">1483</td><td class="slow">1549</td><td class="slow">1756</td>
+	<td class="slow">1516</td><td class="invalid">149</td><td class="slow">2860</td><td class="slow">2829</td><td class="slow">3213</td>
+	<td class="slow">1810</td><td class="slow">3329</td><td class="invalid">140</td><td class="slow">3269</td><td class="slow">3298</td>
+	<td class="slow">2444</td><td class="slow">3826</td><td class="slow">3741</td><td class="invalid">190</td><td class="slow">4008</td>
+	<td class="slow">1786</td><td class="slow">3165</td><td class="slow">2981</td><td class="slow">3111</td><td class="invalid">158</td>
+</tr>
+<tr>
+	<td class="libname">ecl_array.js</td>
+	<td class="invalid">131</td><td>616</td><td class="fast">289</td><td>599</td><td>624</td>
+	<td>294</td><td class="invalid">145</td><td>310</td><td>624</td><td>661</td>
+	<td>314</td><td>616</td><td class="invalid">175</td><td>607</td><td>638</td>
+	<td>288</td><td>609</td><td>304</td><td class="invalid">141</td><td>634</td>
+	<td>547</td><td>902</td><td>616</td><td>853</td><td class="invalid">161</td>
+</tr>
+<tr>
+	<td class="libname">native</td>
+	<td class="invalid">56</td><td class="invalid"></td><td>344</td><td class="invalid"></td><td class="invalid"></td>
+	<td class="invalid"></td><td class="invalid"></td><td class="invalid"></td><td class="invalid"></td><td class="invalid"></td>
+	<td>323</td><td class="invalid"></td><td class="invalid">62</td><td class="invalid"></td><td class="invalid"></td>
+	<td class="invalid"></td><td class="invalid"></td><td class="invalid"></td><td class="invalid"></td><td class="invalid"></td>
+	<td class="invalid"></td><td class="invalid"></td><td class="invalid"></td><td class="invalid"></td><td class="invalid"></td>
+</tr>
+</table>
+<ul>
+<li>nativeは unescape(encodeURIComponent(str))とdecodeURIComponent(escape(utf8str))のこと</li>
+<li>同文字コードへの変換(無変換)はスルーしているので変換速度には影響しない。</li>
+<li>ほぼ全てにおいて encoding.js ＞ ecl_array.js ＞ ecl.js の順に速いという結果になった。</li>
+<li>ecl.js はURLエスケープ、アンエスケープの影響で3～10倍程度遅い</li>
+<li>ecl_array.js は UNICODEが絡む変換はそこそこ速いが、他はencoding.jsより2倍程度遅い。</li>
+<li>encoding.jsは各文字コード間を直接変換しているが、ecl_array.jsは一度UNICODE配列にしているのでUNICODEが絡まない変換が遅いと思われる。</li>
+</ul>
+</dd>
+
+<dt>4KBのテキストを1000回文字変換+URLエスケープ/アンエスケープした時の処理秒数(ms) </dt>
+<dd>
+<table border="1">
+<tr class="column">
+	<td>ライブラリ</td>
+	<td>esc U</td> <td>esc S</td> <td>esc 8</td> <td>esc E</td> <td>esc J</td>
+	<td>unesc U</td> <td>unesc S</td> <td>unesc 8</td> <td>unesc E</td> <td>unesc J</td>
+</tr>
+<tr>
+	<td class="libname">encoding.js</td>
+	<td class="failed">180</td> <td class="slow">1524</td> <td class="slow">1512</td> <td class="slow">1194</td> <td>1227</td>
+	<td class="failed">287</td> <td>406</td> <td>419</td> <td>388</td> <td>716</td>
+</tr>
+<tr>
+	<td class="libname">ecl.js</td>
+	<td class="slow">689</td> <td>1133</td> <td>1389</td> <td>1123</td> <td class="slow">1366</td>
+	<td class="slow">461</td> <td class="slow">649</td> <td class="slow">948</td> <td class="slow">1656</td> <td class="slow">964</td>
+</tr>
+<tr>
+	<td class="libname">ecl_array.js</td>
+	<td>476</td> <td class="fast">934</td> <td>775</td> <td class="fast">949</td> <td class="fast">940</td>
+	<td class="fast">248</td> <td class="fast">281</td> <td>313</td> <td class="fast">286</td> <td class="fast">575</td>
+</tr>
+<tr>
+	<td class="libname">native</td>
+	<td class="invalid"></td> <td class="invalid"></td> <td class="fast">118</td> <td class="invalid"></td> <td class="invalid"></td>
+	<td class="invalid"></td> <td class="invalid"></td> <td class="fast">306</td> <td class="invalid"></td> <td class="invalid"></td>
+</tr>
+</table>
+<ul>
+<li>JS文字列→UTF-8エスケープならばnativeが最速</li>
+<li>ecl.js のエスケープは遅い。ecl_array.js はエスケープ・アンエスケープ処理を変更したら速くなった(正規表現による置換をやめた)</li>
+<li>encoding.jsもアンエスケープは速い。ただUNICODEエスケープは内部でencodeURIComponentを使用しているため失敗(UTF-8へ変換)している</li>
+</ul>
+
+</dd>
+
+</dl>
+
+<h3>考察</h3>
+<dl>
+<dt>文字コード変換について</dt>
+<dd>
+<p>
+encoding.jsが使いやすい。jsのファイルサイズが262KBと大きいが気にならないならコレだけでいいだろう。
+ファイルサイズが気になるならばecl.js(22KB)かecl_array.min.js(23KB)を使い、使わない関数を削除してしまえばよい。
+encoding.jsの文字コード変換は配列を渡し配列で返るので文字列から配列に変換する関数は別途用意する必要がある。
+</p>
+<blockquote><pre class="code">
+<span class="comment">// 文字列を配列に変換</span>
+var str2array = function(str) {
+  var array = [],i,il=str.length;
+  for(i=0;i&lt;il;i++) array.push(str.charCodeAt(i));
+  return array;
+};
+var str   = &quot;あいうえお&quot;,
+    array = str2array( str ),
+    sjis_array = Encoding.convert(array, &quot;SJIS&quot;, &quot;UNICODE&quot;),
+    sjis       = Encoding.codeToString( sjis_array ); <span class="comment">// 配列から文字列変換する関数は用意されている</span>
+alert(sjis);
+</pre></blockquote>
+</dd>
+<dt>URLエスケープについて</dt>
+<dd>
+<p>
+URLエスケープがUTF-8で良いのならば標準の encodeURIComponent() を使えば良い。
+ただ encodeURIComponent() はブラウザ毎にエスケープされる文字が違うので気になるならば ecl.js の EscapeUTF8() か ecl_array.jsの ECL.encodeURIComponent(text) が代替になる。
+各文字コード用のURLエスケープが必要ならば ecl.js の EscapeSJIS() か ecl_array.jsの ECL.escapeSJIS(text) 等を使えば良い。
+</p>
+<p>
+encoding.js の Encoding.urlEncode(array) でも各文字コードのURLエスケープは可能だが
+UNICODEエスケープだけが出来ないので注意。
+ただUNICODE(UTF-16)エスケープにどれだけ需要があるものなのか。
+</p>
+</dd>
+</dl>
+
+<hr>
+<h2>実験フォーム</h2>
+
+<form name="form1">
+<dl>
+
+<dt> 使用ライブラリ </dt>
+<dd>
+	<label><input type="radio" name="enclib" value="3">native(JS文字列&lt;=&gt;UTF8変換のみ)</label>
+	<label><input type="radio" name="enclib" value="1" checked>encoding.js</label>
+	<label><input type="radio" name="enclib" value="0">ecl.js</label>
+	<label><input type="radio" name="enclib" value="2">ecl_array.js</label>
+</dd>
+
+<dt>繰り返し数</dt>
+<dd>
+	<select name="iter" id="iter">
+		<option value="1" selected>1</option>
+		<option value="100">100</option>
+		<option value="1000">1000</option>
+		<option value="10000">10000</option>
+	</select>
+</dd>
+
+<dt>INPUT (charset:<input type="text" name="tacharset" id="tacharset" size="10" value="UNICODE">) 
+  <label><input type="radio" name="tadump" value="Hex">Hex</label>
+  <label><input type="radio" name="tadump" value="Binary" checked>Text</label>
+  <input type="button" onclick="setSample();" value="サンプル文字列をセット">
+</dt>
+<dd>
+  <textarea id="ta" name="ta" cols="80" rows="5"></textarea><br>
+  <input type="button" name="" id="" onclick="click_convert('UNICODE');" value="JS文字列に変換">
+  <input type="button" name="" id="" onclick="click_convert('SJIS');" value="SJISに変換">
+  <input type="button" name="" id="" onclick="click_convert('UTF-8');" value="UTF-8に変換">
+  <input type="button" name="" id="" onclick="click_convert('EUC-JP');" value="EUC-JPに変換">
+  <input type="button" name="" id="" onclick="click_convert('JIS');" value="JISに変換">
+  <span id="tastat"></span>
+</dd>
+
+<dt>OUTPUT (charset:<input type="text" name="ta2charset" id="ta2charset" size="10" value="">)
+  <label><input type="radio" name="ta2dump" value="Hex" checked>Hex</label>
+  <label><input type="radio" name="ta2dump" value="Binary">Text</label>
+</dt>
+<dd>
+  <textarea id="ta2" name="ta2" cols="80" rows="5"></textarea><br>
+  <input type="button" name="" id="" onclick="click_convert2('UNICODE');" value="JS文字列に変換">
+  <input type="button" name="" id="" onclick="click_convert2('SJIS');" value="SJISに変換">
+  <input type="button" name="" id="" onclick="click_convert2('UTF-8');" value="UTF-8に変換">
+  <input type="button" name="" id="" onclick="click_convert2('EUC-JP');" value="EUC-JPに変換">
+  <input type="button" name="" id="" onclick="click_convert2('JIS');" value="JISに変換">
+  <span id="ta2stat"></span>
+</dd>
+<dt>URLエスケープ <input type="button" onclick="setSample();" value="サンプル文字列をセット"></dt>
+<dd>
+  <textarea id="ta3" name="ta3" cols="100" rows="2"></textarea><br>
+  <input type="button" name="" id="" onclick="click_escape('UNICODE');" value="Unicodeエスケープ">
+  <input type="button" name="" id="" onclick="click_escape('SJIS');" value="SJISエスケープ">
+  <input type="button" name="" id="" onclick="click_escape('UTF-8');" value="UTF-8エスケープ">
+  <input type="button" name="" id="" onclick="click_escape('EUC-JP');" value="EUC-JPエスケープ">
+  <input type="button" name="" id="" onclick="click_escape('JIS');" value="JISエスケープ">
+  <span id="ta3stat"></span><br>
+  <textarea id="ta4" name="ta4" cols="100" rows="2"></textarea><br>
+  charset: <input type="text" id="ta4charset" name="ta4charset" size="10" value=""> 
+  <input type="button" name="" id="" onclick="click_unescape();" value="アンエスケープ">
+  <a href="" onclick="$('#ta4').val('');return false;">クリア</a>
+  <span id="ta4stat"></span><br>
+</dd>
+
+</form>
+
+</body>
+</html>
