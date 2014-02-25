@@ -1,4 +1,5 @@
-ECL = {};
+"use strict";
+var ECL = {};
 (function() {
 //
 // Escape Codec Library: ecl.js (Ver.041208)
@@ -234,7 +235,7 @@ enc.Text.stringify = function(array) {
 	return s;
 };
 /**
- * 文字列を24bit整数の配列に変換する
+ * 文字列を24bit(0..0x10FFFF)整数の配列に変換する
 */
 charset.Unicode.parse = function(str){
 	var a=[],i,il=str.length,c;
@@ -786,7 +787,7 @@ charset.guess_array = function(array) {
 	cs=c===239&&array[1]===187&&array[2]===191?"UTF8":c===255&&array[1]===254?"UTF16LE":c===254&&array[1]===255?"UTF16BE":null;
 	if(cs!=null) return cs;
 	//Unicode or ASCII(maybe UTF7,MUTF7) or ...?
-	cs="ASCII",p=a=m=-1,u7=mu7=oct=hex=true,pm=am=b64=mb64=0;
+	cs="ASCII",p=a=m=-1,u7=mu7=true,pm=am=b64=mb64=0;
 	for(i=0;i<il;i++){
 		c=array[i];
 		if(255<c){cs="Unicode";break;}
