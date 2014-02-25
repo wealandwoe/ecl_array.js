@@ -10,6 +10,8 @@ Shift_JIS(CP932),EUC-JP,JIS(iso-2022-jp),UTF-8,UTF-16BE,UTF-16LE,UTF-7,Modified 
 Base64,URLエスケープ(%XX),Unicodeエスケープ(%uXXXX)を実装
 
 
+## サンプルコード
+
 ```js
 // Javascript文字列をShift_JISに変換しBase64エンコードする
 var str = "Markdownの書式がよくわかりません！！",
@@ -22,7 +24,7 @@ ECL.convert(ECL.unescape(escaped),"SJIS","EUCJP")==sjis; //=> true
 
 // Javascript文字列をUTF-8に変換してURLエスケープ(encodeURIComponent互換)
 urlencoded = ECL.encodeURIComponent(str,"UTF8");
-decodeURIComponent(urlencoded)==str;
+decodeURIComponent(urlencoded)==str; //=> true
 
 ```
 
