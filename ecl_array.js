@@ -211,12 +211,13 @@ JCT11280=Function('var a="zKV33~jZ4zN=~ji36XazM93y!{~k2y!o~k0ZlW6zN?3Wz3W?{EKzK[
 JCT8836=JCT11280.substring(0,8836);
 
 var charset={Unicode:{},SJIS:{},EUCJP:{},JIS7:{},JIS8:{},UTF7:{},UTF8:{},UTF16LE:{},UTF16BE:{},MUTF7:{}},
-		enc={Unicode:{},URI:{},Base64:{}};
+		enc={Text:{},Unicode:{},URI:{},Base64:{}};
+
 /**
  * 文字列を16bit整数の配列に変換する
 */
-charset.Unicode.parse = function(str){
-	var a=[],i,il=str.length,c;
+enc.Text.parse = function(str){
+	var a=[],i,il=str.length;
 	for(i=0;i<il;i++) {
 		a.push(str.charCodeAt(i));
 	}
@@ -225,10 +226,33 @@ charset.Unicode.parse = function(str){
 /**
  * 16bit整数の配列を文字列に変換する
 */
+enc.Text.stringify = function(array) {
+	var s="",i,il=array.length,c;
+	for(i=0;i<il;i++) {
+		s+=String.fromCharCode(array[i]);
+	}
+	return s;
+};
+/**
+ * 文字列を24bit整数の配列に変換する
+*/
+charset.Unicode.parse = function(str){
+	var a=[],i,il=str.length,c;
+	for(i=0;i<il;i++) {
+		//scalar                   	UTF-16
+		//000uuuuuxxxxxxyyyyyyyyyy 	110110wwwwxxxxxx 110111yyyyyyyyyy 	wwww = uuuuu - 1
+		55295<(c=str.charCodeAt(i))&&c<56320&&(c=((c&1023)+64<<10)+(str.charCodeAt(++i)&1023));
+		a.push(c);
+	}
+	return a;
+};
+/**
+ * 24bit整数の配列を文字列に変換する
+*/
 charset.Unicode.stringify = function(array){
 	var s="",i,il=array.length,c;
 	for(i=0;i<il;i++) {
-		s += String.fromCharCode(array[i]);
+		s+=(c=array[i])>65535?String.fromCharCode((c>>10)-64|55296,(c&1023|56320)):String.fromCharCode(c);
 	}
 	return s;
 };
@@ -236,7 +260,7 @@ charset.Unicode.fromU=charset.Unicode.toU=function(a){return a;}
 //http://charset.7jp.net/sjis.html
 /**
  * UTF-16の配列からSJISの8bit配列に変換する
- * @param  {Array}  array  UTF-16の16bit配列
+ * @param  {Array}  array  Unicodeの24it配列
  * @return {Array}  SJISの8bit配列
 */
 charset.SJIS.fromU = function(array) {
@@ -253,9 +277,9 @@ charset.SJIS.fromU = function(array) {
 	return a;
 };
 /**
- * SJISの8bit配列をUTF-16の配列に変換する
+ * SJISの8bit配列をUnicodeの配列に変換する
  * @param  {Array}  array SJISの8bit配列
- * @return {Array}  UTF-16の16bit配列
+ * @return {Array}  Unicodeの24bit配列
 */
 charset.SJIS.toU = function(array) {
 	var a=[],i,il=array.length,c;
@@ -524,36 +548,60 @@ charset.MUTF7.toU = function(array) {
 charset.UTF8.fromU = function(array) {
 	var a=[],i,il=array.length,c;
 	for(i=0;i<il;i++) {
-		(c=array[i])<128?a.push(c):c<2048?(a.push(c>>6|192,c&63|128)):(a.push(c>>12|224,c>>6&63|128,c&63|128))
+		(c=array[i])<128 ? a.push(c)
+			: c<2048 ? a.push(c>>6|192,c&63|128)
+				: c<65536 ? a.push(c>>12|224,c>>6&63|128,c&63|128)
+					: a.push(c>>18|240,c>>12&63|128,c>>6&63|128,c&63|128)
 	}
 	return a;
 };
 charset.UTF8.toU = function(array) {
 	var a=[],i,il=array.length,c;
 	array[0]===239&&array[1]===187&&array[2]===191&&(array=array.slice(3));//BOM
-	for(i=0;i<il;i++) a.push((c=array[i])<128?c:c<224?(c&31)<<6|array[++i]&63:((c&15)<<6|array[++i]&63)<<6|array[++i]&63);
+	for(i=0;i<il;i++) a.push(
+		(c=array[i])<128 ? c
+			: c<224 ? (c&31)<<6|array[++i]&63
+				: c<240 ? ((c&15)<<6|array[++i]&63)<<6|array[++i]&63
+					: (((c&7)<<6|array[++i]&63)<<6|array[++i]&63)<<6|array[++i]&63
+	);
 	return a;
 };
 charset.UTF16LE.fromU = function(array) {
-	var a=[],i,il=array.length,c;
-	for(i=0;i<il;i++) {c=array[i];a.push(c&255,c>>>8);}
+	var a=[],i,il=array.length,c,m;
+	for(i=0;i<il;i++) {
+		//scalar                   	UTF-16
+		//000uuuuuxxxxxxyyyyyyyyyy 	110110wwwwxxxxxx 110111yyyyyyyyyy 	wwww = uuuuu - 1
+		(c=array[i])>65535&&(m=(c>>10)-64|55296,a.push(m&255,m>>>8),c=(c&1023|56320));
+		a.push(c&255,c>>>8);
+	}
 	return a;
 };
 charset.UTF16LE.toU = function(array) {
-	var a=[],i,il=array.length;
+	var a=[],i,il=array.length,c;
 	array[0]===255&&array[1]===254&&(array=array.slice(2));
-	for(i=0;i<il;i++) {a.push(array[i]|array[++i]<<8)}
+	for(i=0;i<il;i++) {
+		c=array[i]|array[++i]<<8;
+		55295<c&&c<56320&&(c=((c&1023)+64<<10)+(array[++i]|array[++i]<<8&1023));
+		a.push(c);
+	}
 	return a;
 };
 charset.UTF16BE.fromU = function(array) {
-	var a=[],i,il=array.length,c;
-	for(i=0;i<il;i++) {c=array[i];a.push(c>>>8,c&255);}
+	var a=[],i,il=array.length,c,m;
+	for(i=0;i<il;i++) {
+		(c=array[i])>65535&&(m=(c>>10)-64|55296,a.push(m>>>8,m&255),c=(c&1023|56320));
+		a.push(c>>>8,c&255);
+	}
 	return a;
 };
 charset.UTF16BE.toU = function(array) {
-	var a=[],i,il=array.length;
+	var a=[],i,il=array.length,c;
 	array[0]===254&&array[1]===255&&(array=array.slice(2));
-	for(i=0;i<il;i++) {a.push(array[i]<<8|array[++i]);}
+	for(i=0;i<il;i++) {
+		c=array[i]<<8|array[++i];
+		55295<c&&c<56320&&(c=((c&1023)+64<<10)+(array[i]<<8|array[++i]&1023));
+		a.push(c);
+	}
 	return a;
 };
 charset.UTF16 = charset.UTF16BE;
@@ -590,7 +638,7 @@ charset.convert = function(str, to, from) {
 };
 /**
  * Unicode配列をBase64符号化する
- * @param  {Array}         array 16bit配列
+ * @param  {Array}         array 24bit配列
  * @param  {String|Object} to    変換する文字コード(default:UTF8)
  * @return {Array} Base64符号化された6bit配列
 */
@@ -602,7 +650,7 @@ enc.Base64.fromU = function(array, to) {
  * Base64符号化された6bit配列をUnicode配列にする
  * @param  {Array} array        Base64符号化された6bit配列
  * @param  {String|Object} from 変換する文字コード(default:UTF8)
- * @return {Array} 16bit配列
+ * @return {Array} 24bit配列
 */
 enc.Base64.toU = function(array, from) {
 	!(from=from||'UTF8').hasOwnProperty("toU")&&(from=charset[from]);
@@ -635,25 +683,25 @@ enc.Base64.toB = function(array) {
 };
 enc.Base64.parse = function(str) {
 	str=str.replace(/=+$/,'');
-	return enc.Base64.toB(charset.Unicode.parse(str));
+	return enc.Base64.toB(enc.Text.parse(str));
 };
 enc.Base64.stringify = function(array) {
-	return charset.Unicode.stringify(enc.Base64.fromB(array));
+	return enc.Text.stringify(enc.Base64.fromB(array));
 };
 enc.Base64.encode = function(str, to) {
-	var b=charset.Unicode.stringify(enc.Base64.fromU(charset.Unicode.parse(str),to));
+	var b=enc.Text.stringify(enc.Base64.fromU(charset.Unicode.parse(str),to));
 	b+="===".substring(0,4-b.length%4);
 	return b;
 };
 enc.Base64.decode = function(str, from) {
 	str=str.replace(/=+$/,'');
-	return charset.Unicode.stringify(enc.Base64.toU(charset.Unicode.parse(str),from));
+	return charset.Unicode.stringify(enc.Base64.toU(enc.Text.parse(str),from));
 };
 /**
  * enc.URI.escape
  *   RFC3986に準じて [A-Za-z0-9_.~-] 以外を%エスケープする
  *   RFC2396準拠のencodeURIComponent()と違い [!*'()] もエスケープする
- *   arrayは8bitを想定しているのでUnicode(16bit)配列を渡すと正しい結果にならない
+ *   arrayは8bitを想定しているのでUnicode(24bit)配列を渡すと正しい結果にならない
  * @param  {Array}   array      8bit配列
  * @param  {Boolean} asRFC2396  [!*'()]をエスケープしない (default:false)
  * @return {String}  encoded    エスケープされた文字列
@@ -694,34 +742,34 @@ enc.URI.decodeURIComponent = function(str, from) {
 };
 /**
  * enc.Unicode.escape
- *   Unicode(16bit整数)配列を%エスケープする(0xff以上は%uXXXXになる)
+ *   Unicode(24bit整数)配列を%エスケープする(0xff以上は%uXXXXになる)
  *   [*+\-\.\/@_0-9A-Za-z] 以外はエスケープされる
  *   
- * @param  {Array}   u16array 16bit整数の配列(String#charCodeAt() で取得した整数など)
+ * @param  {Array}   u24array 24bit整数の配列(String#charCodeAt() で取得した整数など)
  * @return {String}  escaped  %エスケープされた文字列
  */
-enc.Unicode.escape = function(u16array) {
-	var s="",i,il=u16array.length,c;
+enc.Unicode.escape = function(u24array) {
+	var s="",i,il=u24array.length,c;
 	for(i=0;i<il;i++) {
-		c=u16array[i];
+		c=u24array[i];
 		s += 41<c&&c<58&&c!=44||63<c&&c<91||94<c&&c<123&&c!=96?String.fromCharCode(c):(c<16?"%0":c<256?"%":c<4096?"%u0":"%u")+c.toString(16).toUpperCase();
 	}
 	return s;
 };
 /**
  * enc.Unicode.unescape
- *   %エスケープされた文字列をUnicode(16bit整数)配列にする
+ *   %エスケープされた文字列をUnicode(24bit整数)配列にする
  *   
  * @return {String}  escaped  %エスケープされた文字列
- * @param  {Array}   u16array 16bit整数の配列
+ * @param  {Array}   u24array 24bit整数の配列
  */
 enc.Unicode.unescape = function(str) {
 	var a=[],i,il=str.length,c;
 	for(i=0;i<il;i++){
 		a.push(
-			(c=str.charCodeAt(i))===37
-			? (c=str.charCodeAt(++i))===117
-				? parseInt(str.charAt(++i)+str.charAt(++i)+str.charAt(++i)+str.charAt(++i),16)
+			(c=str.charCodeAt(i))===37 //%
+			? (c=str.charCodeAt(++i))===117 //%u
+				? parseInt(str.charAt(++i)+str.charAt(++i)+str.charAt(++i)+str.charAt(++i)+((c=str.charAt(i+1))!=="%"?(++i,c):''),16)
 				: parseInt(str.charAt(i)+str.charAt(++i),16)
 			: c
 		);
@@ -738,7 +786,7 @@ charset.guess_array = function(array) {
 	cs=c===239&&array[1]===187&&array[2]===191?"UTF8":c===255&&array[1]===254?"UTF16LE":c===254&&array[1]===255?"UTF16BE":null;
 	if(cs!=null) return cs;
 	//Unicode or ASCII(maybe UTF7,MUTF7) or ...?
-	cs="ASCII",p=a=m=-1,u7=mu7=true,pm=am=b64=mb64=0;
+	cs="ASCII",p=a=m=-1,u7=mu7=oct=hex=true,pm=am=b64=mb64=0;
 	for(i=0;i<il;i++){
 		c=array[i];
 		if(255<c){cs="Unicode";break;}
@@ -767,7 +815,7 @@ charset.guess_array = function(array) {
 	return cs?cs:GetEscapeCodeType(enc.URI.escape(array));
 };
 charset.guess = function(str) {
-	return charset.guess_array(charset.Unicode.parse(str));
+	return charset.guess_array(enc.Text.parse(str));
 };
 var names=["SJIS","EUCJP","JIS7","JIS8","Unicode","UTF7","UTF8","UTF16LE","UTF16BE","MUTF7"],i,il=names.length,that=this;
 ECL.charset=charset;
