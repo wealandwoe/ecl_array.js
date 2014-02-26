@@ -557,9 +557,9 @@ charset.UTF8.fromU = function(array) {
 	return a;
 };
 charset.UTF8.toU = function(array) {
-	var a=[],i,il=array.length,c;
-	array[0]===239&&array[1]===187&&array[2]===191&&(array=array.slice(3));//BOM
-	for(i=0;i<il;i++) a.push(
+	var a=[],i=0,il=array.length,c;
+	array[0]===239&&array[1]===187&&array[2]===191&&(i=3);//BOM
+	for(;i<il;i++) a.push(
 		(c=array[i])<128 ? c
 			: c<224 ? (c&31)<<6|array[++i]&63
 				: c<240 ? ((c&15)<<6|array[++i]&63)<<6|array[++i]&63
@@ -578,11 +578,11 @@ charset.UTF16LE.fromU = function(array) {
 	return a;
 };
 charset.UTF16LE.toU = function(array) {
-	var a=[],i,il=array.length,c;
-	array[0]===255&&array[1]===254&&(array=array.slice(2));
-	for(i=0;i<il;i++) {
+	var a=[],i=0,il=array.length,c;
+	array[0]===255&&array[1]===254&&(i=2);
+	for(;i<il;i++) {
 		c=array[i]|array[++i]<<8;
-		55295<c&&c<56320&&(c=((c&1023)+64<<10)+(array[++i]|array[++i]<<8&1023));
+		55295<c&&c<56320&&(c=((c&1023)+64<<10)+((array[++i]|array[++i]<<8)&1023));
 		a.push(c);
 	}
 	return a;
@@ -596,11 +596,11 @@ charset.UTF16BE.fromU = function(array) {
 	return a;
 };
 charset.UTF16BE.toU = function(array) {
-	var a=[],i,il=array.length,c;
-	array[0]===254&&array[1]===255&&(array=array.slice(2));
-	for(i=0;i<il;i++) {
+	var a=[],i=0,il=array.length,c;
+	array[0]===254&&array[1]===255&&(i=2);
+	for(;i<il;i++) {
 		c=array[i]<<8|array[++i];
-		55295<c&&c<56320&&(c=((c&1023)+64<<10)+(array[i]<<8|array[++i]&1023));
+		55295<c&&c<56320&&(c=((c&1023)+64<<10)+((array[++i]<<8|array[++i])&1023));
 		a.push(c);
 	}
 	return a;
