@@ -714,7 +714,7 @@ enc.Base64.decode = function(str, from) {
  *   なお、上記の "!", "'", "(", ")", "*" が sub-delims の文字であるが、これらは RFC 2396 では unreserved に属していた。
 */
 enc.URI.escape = function(array, asRFC2396) {
-	var s="",i,il=array.length;
+	var s="",i,il=array.length,c;
 	if (asRFC2396) {
 			for(i=0;i<il;i++) s+=(c=array[i])<58&&c>38||64<c&&c<91||96<c&&c<123&&c!=43&&c!=44&&c!=47||c===33||c===95||c===126?String.fromCharCode(c):(c<16?"%0":"%")+c.toString(16).toUpperCase();
 	} else {
