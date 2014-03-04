@@ -259,6 +259,7 @@ charset.Unicode.stringify = function(array){
 };
 charset.Unicode.fromU=charset.Unicode.toU=function(a){return a;}
 //http://charset.7jp.net/sjis.html
+//http://ja.wikipedia.org/wiki/Microsoft%E3%82%B3%E3%83%BC%E3%83%89%E3%83%9A%E3%83%BC%E3%82%B8932
 /**
  * UTF-16の配列からSJISの8bit配列に変換する
  * @param  {Array}  array  Unicodeの24it配列
@@ -319,19 +320,7 @@ charset.SJIS.toE = function(array) {
 			? (160<c&&a.push(142),a.push(c)) //ASCII+ｶﾅ
 			: (
 				c=(c<160?c-129:c-193)*188+((c=array[++i])<127?c-64:c-65),
-				//TODO: Shift_JIS-2004対応 区点の求め方がよく解らない
-				/*
-				console.debug(c),
-				c>8835 ? ( //JIS X 0213 
-						c-=8836,
-						k=(c-(c%=94))/94,
-						(console.debug(k)),
-						k=(k===0||1<k&&k<5||k===7||10<k&&k<15 ? ((k+480)>>>1)-((k+1)>>3)*3
-							: 76<k&&k<94 ? (k+412)>>>1
-								: -1),
-						k>0 ? a.push(143,k,c+161) : a.push(161,166)
-					)
-					:*/ a.push((c-(c%=94))/94+161, c+161)
+					a.push((c-(c%=94))/94+161, c+161)
 			)
 	}
 	return a;
@@ -619,6 +608,7 @@ charset.convert_array = function(array, to, from) {
 	!from.hasOwnProperty("toU") && (from=charset[from]);
 	!to.hasOwnProperty("fromU") && (to=charset[to]);
 	if (to==from) {return array;}
+	if(from.hasOwnProperty("toJ") && to.hasOwnProperty("fromJ")) return to.fromJ(from.toJ(array));
 	if(from.hasOwnProperty("toE") && to.hasOwnProperty("fromE")) return to.fromE(from.toE(array));
 	return to.fromU(from.toU(array));
 }

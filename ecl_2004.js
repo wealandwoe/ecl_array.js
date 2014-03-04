@@ -15,31 +15,33 @@
 (function() {
 
 /**
- * U2J,J2U Unicode番号とJIS番号の対応テーブル
+ * U2CP,CP2U Unicode番号とJIS番号の対応テーブル
  *   JIS X 0213で扱う漢字はUnicodeに変換するとサロゲートペアや文字合成を用いており必ずしもJIS1字はUnicode1字とは限らない
- *   そこで、JIS番号(並び順を整数にしたもの)に対応するUnicodeのスカラ値を下記の規則で変換した
+ *   そこで、JIS番号及びUnicodeのスカラ値を下記の規則で変換した
  *   (1)Unicode1字やサロゲートペア(U+10000以上)の場合はスカラ値をそのまま使う
- *   (2)文字合成の場合は1文字目と2文字目を足して32bitの整数にする(JISの範囲内の文字合成に使う字は16bitに収まっている)
- *   
+ *   (2)Unicodeが文字合成の場合は1文字目と2文字目を足して32bitの整数にする(JISの範囲内の文字合成に使う字は16bitに収まっている)
+ *   (3)JIS番号は面区点(p-r-c)から p<<14|(r-1)<<7|(c-1) として3*7bitの整数に変換する(7bit=128なので94が充分収まる)
+ *     "あ"(1面4区2点)ならば (1<<14)|(3<<7)|1 = 16769 になる
+ *
  * @example
- *   ECL.J2U[0]; //=> 12288 //"　"
- *   ECL.U2J["　".charCodeAt(0)]; //=> 0
- *   var c = ECL.J2U[368]; //=> 810234010 //0x10ffffを超える場合は文字合成されたもの
+ *   ECL.U2CP["　".charCodeAt(0)]; //=> 16384(==1<<14|0<<7|0)
+ *   var c = ECL.CP2U[16854]; //=> 810234010 //0x10ffffを超える場合は文字合成されたもの
  *   String.fromCharCode(c>>16, c&0xffff); //=> "か゚"
- *   c = ECL.J2U[1223]; //=> 131083  //0x10000以上0x110000未満のものはサロゲートペア
+ *   c = ECL.CP2U[18049]; //=> 131083  //0x10000以上0x110000未満のものはサロゲートペア
  *   String.fromCharCode((c>>10)-64|0xD800,(c&1023|0xDC00)); //=> "𠀋"
 */
-var U2J={},J2U={};
+var /*U2J={},J2U={},*/U2CP={},CP2U={};
 var decodeB64DeflatedU16 = function(str) {
 	var a=(new Zlib.Inflate(ECL.enc.Base64.parse(str))).decompress(),
-			i,j=0,il=a.length,u=String.fromCharCode,str="",c,m;
+			i,j=0,cp=0,il=a.length,u=String.fromCharCode,str="",c,m;
 	for(i=2;i<il;(i+=4,j++)) {
 		//str+=u((c=a[i]<<8|a[i+1]),(m=a[i+2]<<8|a[i+3]));
 		c=a[i]<<8|a[i+1];m=a[i+2]<<8|a[i+3];
-		if(c===32&&(m===65533||m===12307&&U2J[m])){continue;} //REPLACEMENT_CHARACTER and GETA_CHARACTER
-		c===32 ? (U2J[J2U[j]=m]=j) //1byte目が" "ならば16bit整数
-			: 55295<c&&c<56320&&56319<m&&m<57344 ? (U2J[J2U[j]=((c&1023)+64<<10)+(m&1023)]=j) //サロゲートペア303字は24bit整数に
-				: (U2J[J2U[j]=c<<16|m]=j); //合成語は32bit整数に変換(全25字を調べたが負数は無い)
+		cp = (j/8836|0)+1<<14 | ((j%8836)/94)<<7 | (j%94); //cpは面区点を7bit*3に区切った21bitの整数(1-1-1は16384になる。区点は0スタート)
+		if(c===32&&(m===65533||m===12307&&U2CP[m])){continue;} //REPLACEMENT_CHARACTER and GETA_CHARACTER
+		c===32 ? (/*U2J[J2U[j]=m]=j,*/U2CP[CP2U[cp]=m]=cp) //1byte目が" "ならば16bit整数
+			: 55295<c&&c<56320&&56319<m&&m<57344 ? (c=((c&1023)+64<<10)+(m&1023),/*U2J[J2U[j]=c]=j,*/CP2U[U2CP[c]=cp]=c) //サロゲートペア303字は24bit整数に
+				: (c=c<<16|m,/*U2J[c=J2U[j]=c]=j,*/CP2U[U2CP[c]=cp]=c); //合成語は32bit整数に変換(全25字を調べたが負数は無い)
 	}
 	return str;
 };
@@ -84,10 +86,19 @@ charset.SJIS2004.fromU = function(array) {
 			65376<c&&c<65440 ? a.push(c-65216) : (
 				n&&isComposed(c,n)&&(c=c<<16|n,i++),
 				//console.log(["U:"+c,"J:"+(
-					c=U2J[c]
+/*
+					c=U2J[c]||-1
 				//)])
 				,c)<0 ? a.push(129,69) : a.push(
-					(p=c/8836|0,r=(c-p*8836)/94|0,c=c%94,/*console.log([p,r,c])*/p<1)?(r+((r<62)?258:386))>>1
+					(p=c/8836|0,r=(c-p*8836)/94|0,c=c%94,p<1)?(r+((r<62)?258:386))>>1
+						: 0<=r&&r<5&&r!==1||r===7||10<r&&r<15?((r+480)>>1)-(r+1>>3)*3
+							: 76<r&&r<94?(r+412)>>1:(c=-1,129),
+					c>=0?c+(r%2==0?c<63?64:65:159):69
+				)
+*/
+					c=U2CP[c]||-1
+				,c)<0 ? a.push(129,69) : a.push(
+					(p=c>>>14,r=c>>>7&127,c=c&127,p<2)?(r+((r<62)?258:386))>>1
 						: 0<=r&&r<5&&r!==1||r===7||10<r&&r<15?((r+480)>>1)-(r+1>>3)*3
 							: 76<r&&r<94?(r+412)>>1:(c=-1,129),
 					c>=0?c+(r%2==0?c<63?64:65:159):69
@@ -104,21 +115,57 @@ charset.SJIS2004.fromU = function(array) {
 //2面 8-15区は1byte目-190   8:F0[9E-EE], 12:F2[9E-EE], 13:F3[3F-90], 14:F3[9E-EE] 15:F4[3F-90]
 //2面78-94区は1byte目-159  78:F4[9E-EE], ..., 94:FC[9E-EE]
 charset.SJIS2004.toU = function(array) {
-	var a=[],i,il=array.length,c,m,u;
+	var a=[],i,il=array.length,p,r,c,m,u;
 	for(i=0;i<il;i++) {
 		c = array[i];
 		(c<128||160<c&&c<224) 
 			? a.push(160<c?c+65216:c) //ASCII+ｶﾅ
 			: (m=array[++i],
-					c=(c<160?c-129
-							: c<240||c===241||c<243&&m<159?c-193
+					c=(c<160?(p=1,c-129)
+							: (p=2,c<240||c===241||c<243&&m<159)?c-193
 								: c<244||c===244&&m<159?c-190
 									: c-159
-						)*188+(m<127?m-64:m-65),
+						)*188+(m<127?m-64:m-65)-8836*(p-1),
 //					console.debug("J2U["+c+"]"),
+/*
 					u=J2U[c]
 				)<1114112?a.push(u)
 					: a.push(u>>>16,u&65535);
+*/
+					u=CP2U[p<<14|(c/94|0)<<7|c%94]
+				)<1114112?a.push(u)
+					: a.push(u>>>16,u&65535);
+	}
+	return a;
+};
+charset.SJIS2004.fromJ = function(array) {
+	var a=[],i,il=array.length,p,r,c,n;
+	for(i=0;i<il;i++) {
+		c=array[i];
+		(c<128||160<c&&c<224) ? a.push(c) : 
+			c<16384 ? a.push(129,69) : a.push(
+				(p=(c>>>14),r=(c>>>7)&127,c=c&127,p<2)?(r+((r<62)?258:386))>>1
+					: 0<=r&&r<5&&r!==1||r===7||10<r&&r<15?((r+480)>>1)-(r+1>>3)*3
+						: 76<r&&r<94?(r+412)>>1:(c=-1,129),
+				c>=0?c+(r%2==0?c<63?64:65:159):69
+			)
+	}
+	return a;
+};
+charset.SJIS2004.toJ = function(array) {
+	var a=[],i,il=array.length,p,r,c,m;
+	for(i=0;i<il;i++) {
+		c = array[i];
+		(c<128||160<c&&c<224) ? a.push(c)
+			: (m=array[++i],
+					c=(c<160?(p=1,c-129)
+							: (p=2,c<240||c===241||c<243&&m<159)?c-193
+								: c<244||c===244&&m<159?c-190
+									: c-159
+						)*188+(m<127?m-64:m-65)-8836*(p-1),
+//					console.debug("toJ[p-r-c]["+p+"-"+(1+(c/94|0))+"-"+(1+(c%94))+"]"),
+					a.push(p<<14|(c/94|0)<<7|c%94)
+				);
 	}
 	return a;
 };
@@ -128,8 +175,12 @@ charset.EUCJIS2004.fromU = function(array) {
 	for(i=0;i<il;i++) {
 		(c=array[i])<128 ? a.push(c)
 			: 65376<c&&c<65440 ? a.push(142,c-65216)
+/*
 				: (n=array[i+1],n&&isComposed(c,n)&&(c=c<<16|n,i++),c=U2J[c])<0 ? a.push(161,166)
 					: (p=c/8836|0,r=(c-p*8836)/94|0,c=c%94,p>0&&a.push(143),a.push(r+161,c+161))
+*/
+				: (n=array[i+1],n&&isComposed(c,n)&&(c=c<<16|n,i++),c=U2CP[c])<0 ? a.push(161,166)
+					: (p=c>>>14,r=c>>7&127,c=c&127,p>1&&a.push(143),a.push(r+161,c+161))
 	}
 	return a;
 };
@@ -138,8 +189,28 @@ charset.EUCJIS2004.toU = function(array) {
 	for(i=0;i<il;i++) {
 		c = array[i];
 		(c<161&&c!==143) ? a.push(c<128 ? c : array[++i]+65216) //ASCII+ｶﾅ
-			: (p=c===143?(c=array[++i],1):0,u=J2U[(c=p*8836+(c-161)*94+array[++i]-161)])<1114112?a.push(u)
+//			: (p=c===143?(c=array[++i],1):0,u=J2U[(c=p*8836+(c-161)*94+array[++i]-161)])<1114112?a.push(u)
+			: (p=c===143?(c=array[++i],2):1,u=CP2U[p<<14|c-161<<7|array[++i]-161])<1114112?a.push(u)
 				: a.push(u>>>16,u&65535);
+	}
+	return a;
+};
+charset.EUCJIS2004.fromJ = function(array) {
+	var a=[],i,il=array.length,p,r,c,n;
+	for(i=0;i<il;i++) {
+		(c=array[i])<128 ? a.push(c)
+			: 160<c&&c<224 ? a.push(142,c)
+				: c<16384 ? a.push(161,166)
+					: (p=c>>>14,r=c>>7&127,c=c&127,p>1&&a.push(143),a.push(r+161,c+161))
+	}
+	return a;
+};
+charset.EUCJIS2004.toJ = function(array) {
+	var a=[],i,il=array.length,c,p,u;
+	for(i=0;i<il;i++) {
+		c = array[i];
+		(c<128||c===142&&(c=array[++i])) ? a.push(c)
+			: (p=c===143?(c=array[++i],2):1,a.push(p<<14|c-161<<7|array[++i]-161))
 	}
 	return a;
 };
@@ -149,8 +220,12 @@ charset.JIS2004.fromU = function(array) {
 	for(i=0;i<il;i++) {
 		(c=array[i])<128 ? ((e!==es[0] && (e=es[0],a.push(27,40,66))),a.push(c))
 			: 65376<c&&c<65440 ? ((e!==es[1] && (e=es[1],a.push(27,40,73))),a.push(c-65344))
+/*
 				: (n=array[i+1],n&&isComposed(c,n)&&(c=c<<16|n,i++),c=U2J[c])<0 ? a.push(33,38)
 					: (p=c<8836?0:1,c-=p*8836,e!==es[2+p] && (e=es[2+p],a.push(27,36,40,81+p)),a.push((c-(c%=94))/94+33,c+33))
+*/
+				: (n=array[i+1],n&&isComposed(c,n)&&(c=c<<16|n,i++),c=U2CP[c])<0 ? a.push(33,38)
+					: (p=(c>>>14),e!==es[1+p] && (e=es[1+p],a.push(27,36,40,80+p)),a.push((c>>>7&127)+33,(c&127)+33))
 	}
 	e!==es[0] && a.push(27,40,66); //ASCIIで終わっている必要がある
 	return a;
@@ -164,9 +239,37 @@ charset.JIS2004.toU = function(array) {
 	for(i=0;i<il;i++) {
 		array[i]===27 && (array[++i]===36?(e=array[++i]===40?es[2+array[++i]-81]:es[2],i++):(e=(array[++i]===73?es[1]:es[0]),i++));
 		(i<il)&&(c=array[i]) && ( 
+/*
 			e>es[1] ? (c=J2U[(e===es[3]?8836:0)+(c-33)*94+array[++i]-33])<1114112?a.push(c):a.push(c>>>16,c&65535)
 				: e===es[1] ? a.push(c+65344)
 					: a.push(c<128 ? c : c+65216)
+*/
+			e>es[1] ? (c=CP2U[(e===es[3]?2:1)<<14|(c-33)<<7|array[++i]-33])<1114112?a.push(c):a.push(c>>>16,c&65535)
+				: e===es[1] ? a.push(c+65344)
+					: a.push(c<128 ? c : c+65216)
+		);
+	}
+	return a;
+};
+charset.JIS2004.fromJ = function(array) {
+	var a=[],i,il=array.length,p,c,n,es=[0,1,2,3],e=es[0];
+	for(i=0;i<il;i++) {
+		(c=array[i])<128 ? ((e!==es[0] && (e=es[0],a.push(27,40,66))),a.push(c))
+			: 160<c&&c<224 ? ((e!==es[1] && (e=es[1],a.push(27,40,73))),a.push(c))
+				: c<16384 ? a.push(33,38)
+					: (p=(c>>>14),e!==es[1+p] && (e=es[1+p],a.push(27,36,40,80+p)),a.push((c>>>7&127)+33,(c&127)+33))
+	}
+	e!==es[0] && a.push(27,40,66); //ASCIIで終わっている必要がある
+	return a;
+};
+charset.JIS2004.toJ = function(array) {
+	var a=[],i,il=array.length,p,c,es=[0,1,2,3],e=es[0];
+	for(i=0;i<il;i++) {
+		array[i]===27 && (array[++i]===36?(e=array[++i]===40?es[2+array[++i]-81]:es[2],i++):(e=(array[++i]===73?es[1]:es[0]),i++));
+		(i<il)&&(c=array[i]) && ( 
+			e>es[1] ? a.push((e===es[3]?2:1)<<14|(c-33)<<7|array[++i]-33)
+				: e===es[1] ? a.push(c+128)
+					: a.push(c)
 		);
 	}
 	return a;
@@ -181,8 +284,9 @@ for(i=0;i<il;i++) {
 	ECL.charset[names[i]].stringify = (function(fnc){return function(array){return ECL.charset.Unicode.stringify(fnc(array));};})(charset[names[i]].fromU);
 }
 //ECL.JISX0213 = JISX0213;
-ECL.U2J=U2J;
-ECL.J2U=J2U;
-
+//ECL.U2J=U2J;
+//ECL.J2U=J2U;
+ECL.U2CP=U2CP;
+ECL.CP2U=CP2U;
 
 })();

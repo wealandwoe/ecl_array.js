@@ -67,12 +67,12 @@ var debug;
  * SJIS,EUCJP,JIS7,JIS8,Unicode,UTF7,UTF8,UTF16LE
  */
 var CharsetNames = {
-// label    : ecl.js, encoding.js, ecl_array.js
-	'SJIS'    : ['SJIS', 'SJIS', 'SJIS'],
-	'EUC-JP'  : ['EUCJP', 'EUCJP', 'EUCJP'],
-	'JIS'     : ['JIS7', 'JIS', 'JIS7'],
-	'UTF-8'   : ['UTF8', 'UTF8', 'UTF8'],
-	'UNICODE' : ['Unicode', 'UNICODE', 'Unicode']
+// label    : ecl.js, encoding.js, ecl_array.js, ecl_2004.js
+	'SJIS'    : ['SJIS', 'SJIS', 'SJIS', 'SJIS2004'],
+	'EUC-JP'  : ['EUCJP', 'EUCJP', 'EUCJP', 'EUCJIS2004'],
+	'JIS'     : ['JIS7', 'JIS', 'JIS7', 'JIS2004'],
+	'UTF-8'   : ['UTF8', 'UTF8', 'UTF8', 'UTF8'],
+	'UNICODE' : ['Unicode', 'UNICODE', 'Unicode', 'Unicode']
 }
 var convert = function(text, toCharset, fromCharset, dumptypeTo, dumptypeFrom) {
 	var array,out_array,enclib;
@@ -104,13 +104,13 @@ var convert_with = function(enclib, text, toCharset, fromCharset, dumptypeTo, du
 	} else if (enclib==1) { //"encoding.js"
 		in_array = Utils.ByteArray["from"+dumptypeFrom](text);
 		out_array = Encoding.convert(in_array, to, from);
-	} else if (enclib==2) { //"ecl_array.js"
+	} else if (enclib==2||enclib==3) { //"ecl_array.js", "ecl_2004.js"
 		in_array = Utils.ByteArray["from"+dumptypeFrom](text);
 		//in_array = Utils.ByteArray["from"+dumptypeFrom](text);
 		//out_array = ECL["to"+to+"Array"](ECL["from"+from+"Array"](in_array));
 		//out_array = ECL.charset[to].parse(ECL.charset[from].stringify(in_array));
 		out_array = ECL.convert_array(in_array, to, from);
-	} else if (enclib==3) { // native
+	} else if (enclib==10) { // native
 		if ((fromCharset=='UNICODE' || fromCharset=='UTF-8') && (toCharset=='UNICODE' || toCharset=='UTF-8')) {
 			text = fromCharset=='UNICODE' ? unescape(encodeURIComponent(text)) : decodeURIComponent(escape(text));
 			if (dumptypeTo=='Binary') {
@@ -178,9 +178,9 @@ var urlescape = function(text, toCharset) {
 		arr = to=='UNICODE' ? arr : Encoding.convert(arr,to,'UNICODE')
 //		console.debug("arr:"+arr);
 		escaped = Encoding.urlEncode(arr);
-	} else if (enclib==2) {
+	} else if (enclib==2||enclib==3) {
 		escaped = (to=='Unicode') ? ECL.escape(text) : ECL.encodeURIComponent(text,to);
-	} else if (enclib==3) {
+	} else if (enclib==10) {
 		if (toCharset=='UTF-8') {
 			escaped = encodeURIComponent(text);
 		} else {
@@ -201,10 +201,10 @@ var urlunescape = function(text, fromCharset) {
 		arr = from=='UNICODE' ? arr : Encoding.convert(arr,'UNICODE',from)
 //		console.debug("arr:"+arr);
 		unescaped = Encoding.codeToString(arr);
-	} else if (enclib==2) {
+	} else if (enclib==2 || enclib==3) {
 		//unescaped = ECL.charset[from].stringify(from=='Unicode' ? ECL.enc.Unicode.unescape(text) : ECL.enc.URI.unescape(text));
 		unescaped = from=='Unicode' ? ECL.unescape(text) : ECL.decodeURIComponent(text,from);
-	} else if (enclib==3) {
+	} else if (enclib==10) {
 		if (fromCharset=='UTF-8') {
 			unescaped = decodeURIComponent(text);
 		} else {
@@ -496,10 +496,11 @@ UNICODEエスケープだけが出来ないので注意。
 
 <dt> 使用ライブラリ </dt>
 <dd>
-	<label><input type="radio" name="enclib" value="3">native(JS文字列&lt;=&gt;UTF8変換のみ)</label>
+	<label><input type="radio" name="enclib" value="10">native(JS文字列&lt;=&gt;UTF8変換のみ)</label>
 	<label><input type="radio" name="enclib" value="1" checked>encoding.js</label>
 	<label><input type="radio" name="enclib" value="0">ecl.js</label>
 	<label><input type="radio" name="enclib" value="2">ecl_array.js</label>
+	<label><input type="radio" name="enclib" value="3">ecl_2004.js</label>
 </dd>
 
 <dt>繰り返し数</dt>
@@ -507,7 +508,10 @@ UNICODEエスケープだけが出来ないので注意。
 	<select name="iter" id="iter">
 		<option value="1" selected>1</option>
 		<option value="100">100</option>
+		<option value="1000">500</option>
 		<option value="1000">1000</option>
+		<option value="10000">3000</option>
+		<option value="10000">5000</option>
 		<option value="10000">10000</option>
 	</select>
 </dd>
