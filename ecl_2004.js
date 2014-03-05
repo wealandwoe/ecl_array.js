@@ -283,10 +283,8 @@ for(i=0;i<il;i++) {
 	ECL.charset[names[i]].parse = (function(fnc){return function(str){return fnc(ECL.charset.Unicode.parse(str));};})(charset[names[i]].toU);
 	ECL.charset[names[i]].stringify = (function(fnc){return function(array){return ECL.charset.Unicode.stringify(fnc(array));};})(charset[names[i]].fromU);
 }
-//ECL.JISX0213 = JISX0213;
 //ECL.U2J=U2J;
 //ECL.J2U=J2U;
-ECL.U2CP=U2CP;
-ECL.CP2U=CP2U;
+ECL.JISX0213={"U2CP":U2CP,"CP2U":CP2U};
 
 })();
