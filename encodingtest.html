@@ -4,6 +4,7 @@
 <title>js charset encoding test</title>
 <script src="http://code.jquery.com/jquery-1.11.0.min.js"></script>
 <script type="text/javascript" src="./utils.js"></script>
+<script type="text/javascript" src="./utils_crc32.js"></script>
 <!-- Character Encoding -->
 <script type="text/javascript" src="./encoding.js"></script>
 <script type="text/javascript" src="./ecl.js"></script>
@@ -140,7 +141,7 @@ var click_convert = function(toCharset) {
 	}
 	timer.stop();
 	msec = timer.getTime();
-	$("#tastat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps)");
+	$("#tastat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps) CRC32:"+Utils.CRC32.hexstring(encoded));
 	
 	$("#tacharset").val(fromCharset);
 	$("#ta2charset").val(toCharset);
@@ -159,7 +160,7 @@ var click_convert2 = function(toCharset) {
 	}
 	timer.stop();
 	msec = timer.getTime();
-	$("#ta2stat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps)");
+	$("#ta2stat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps) CRC32:"+Utils.CRC32.hexstring(encoded));
 
 	$("#tacharset").val(toCharset);
 	$("#ta2charset").val(fromCharset);
@@ -221,7 +222,7 @@ var click_escape = function(toCharset) {
 	}
 	timer.stop();
 	msec = timer.getTime();
-	$("#ta3stat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps)");
+	$("#ta3stat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps) CRC32:"+Utils.CRC32.hexstring(encoded));
 	
 	$("#ta4charset").val(toCharset);
 	$("#ta4").val(encoded);
@@ -237,7 +238,7 @@ var click_unescape = function(toCharset) {
 	}
 	timer.stop();
 	msec = timer.getTime();
-	$("#ta4stat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps)");
+	$("#ta4stat").html("処理時間:"+msec+"msec ("+Math.floor(iter*1000/msec)+"/cps) CRC32:"+Utils.CRC32.hexstring(encoded));
 
 	$("#ta3").val(encoded);
 };
@@ -341,6 +342,10 @@ ECL.charset.Unicode.stringify( array ); <span class="comment">//=> &quot;あい�
 var utf8str = unescape(encodeURIComponent(&quot;あいうえお&quot;));
 var sjisstr = ECL.convert(utf8str, 'SJIS', 'UTF8');
 sjisstr == &quot;\x82\xA0\x82\xA2\x82\xA4\x82\xA6\x82\xA8&quot;; <span class="comment">//=> true</span>
+
+<span class="comment">// SJIS文字列をEUC-JPに変換しBase64エンコード</span>
+var eucstr = ECL.convert(sjisstr, 'EUCJP', 'SJIS');
+var eucBase64 = ECL.encodeBase64(eucstr, 'EUCJP'); <span class="comment">// &quot;pKKkpKSmpKikqg==&quot;</span>
 
 <span class="comment">/*
  例: ecl_array.js と CryptoJS を使いSJISテキストの暗号文・Base64・SHA1ハッシュを作る

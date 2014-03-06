@@ -281,7 +281,7 @@ charset.Unicode.parse = function(str){
 charset.Unicode.stringify = function(array){
 	var s="",i,il=array.length,c;
 	for(i=0;i<il;i++) {
-		s+=(c=array[i])>65535?String.fromCharCode((c>>10)-64|55296,(c&1023|56320)):String.fromCharCode(c);
+		s+=(c=array[i])>65535?String.fromCharCode((c>>>10)-64|55296,(c&1023|56320)):String.fromCharCode(c);
 	}
 	return s;
 };
@@ -325,38 +325,12 @@ charset.SJIS.toU = function(array) {
 		(c<128||160<c&&c<224) 
 			? a.push(160<c?c+65216:c) //ASCII+ｶﾅ
 //			: a.push( JCT11280.charAt((c<160?c-129:c-193)*188+(c=array[++i],c<127?c-64:c-65)).charCodeAt(0) )
-			: a.push( CP2U[P1|(c<160?c-129:c-193)<<8|(c=array[++i],c<127?c-64:c-65)] )
+			: a.push( CP2U[P1|(c<160?c-129:c-193)<<8|(c=array[++i],c<127?c-64:c<159?c-65:c-31)] )
 	}
 	return a;
 };
 //http://www.unixuser.org/~euske/doc/kanjicode/
-// EUCからSJISに変換
-charset.SJIS.fromE = function(array) {
-	var a=[],i,il=array.length,c,m,k;
-	for(i=0;i<il;i++) {
-		c=array[i];
-		c<128 ? a.push(c) //(c-161)*94 + array[++i]-161
-			: c===142 ? a.push(array[++i])
-				: (c=(c-161)*94+array[++i]-161,
-					a.push((m=(c-(c%=188))/188)<31?m+129:m+193, c+=c<63?64:65)
-				)
-	}
-	return a;
-};
-// SJISからEUCに変換
-charset.SJIS.toE = function(array) {
-	var a=[],i,il=array.length,c,k;
-	for(i=0;i<il;i++) {
-		c = array[i];
-		(c<128||160<c&&c<224) 
-			? (160<c&&a.push(142),a.push(c)) //ASCII+ｶﾅ
-			: (
-				c=(c<160?c-129:c-193)*188+((c=array[++i])<127?c-64:c-65),
-					a.push((c-(c%=94))/94+161, c+161)
-			)
-	}
-	return a;
-};
+// JIS区点位置からSJISに変換
 charset.SJIS.fromJ = function(array) {
 	var a=[],i,il=array.length,c,m;
 	for(i=0;i<il;i++) {
@@ -374,8 +348,8 @@ charset.SJIS.toJ = function(array) {
 	var a=[],i,il=array.length,c,k;
 	for(i=0;i<il;i++) {
 		c = array[i];
-		(c<224) ? a.push(c) //ASCII+ｶﾅ
-			: a.push( P1|(c<160?c-129:c-193)<<8|(c=array[++i],c<127?c-64:c-65) )
+		(c<128||160<c&&c<224) ? a.push(c) //ASCII+ｶﾅ
+			: a.push( P1|(c<160?c-129:c-193)<<8|(c=array[++i],c<127?c-64:c<159?c-65:c-31) )
 	}
 	return a;
 };
@@ -406,8 +380,6 @@ charset.EUCJP.toU = function(array) {
 	}
 	return a;
 };
-charset.EUCJP.fromE = function(array) {return array;}
-charset.EUCJP.toE = function(array) {return array;}
 charset.EUCJP.fromJ = function(array) {
 	var a=[],i,il=array.length,c;
 	for(i=0;i<il;i++) {
@@ -455,36 +427,13 @@ charset.JIS7.toU = function(array) {
 	}
 	return a;
 };
-charset.JIS7.fromE = function(array) {
-	var a=[],i,il=array.length,c,es=[0,1,2],e=es[0];
-	for(i=0;i<il;i++) {
-		(c=array[i])<128 ? ((e!=es[0] && (e=es[0],a.push(27,40,66))),a.push(c))
-			: c===142 ? ((e!=es[1] && (e=es[1],a.push(27,40,73))),a.push(c=array[++i]-128))
-				: (e!=es[2] && (e=es[2],a.push(27,36,66)),
-					c<161 ? a.push(33,38) : a.push(c-128,array[++i]-128))
-	}
-	e!==es[0] && a.push(27,40,66); //ASCIIで終わっている必要がある
-	return a;
-};
-charset.JIS7.toE = function(array) {
-	var a=[],i,il=array.length,c,es=[0,1,2],e=es[0];
-	for(i=0;i<il;i++) {
-		array[i]===27 && (array[++i]===36?(e=es[2],i+=2):(e=(array[++i]===73?es[1]:es[0]),i++));
-		(i<il)&&(c=array[i]) && ( 
-			e===es[2] ? a.push(c+128, array[++i]+128)
-				: e===es[1] ? a.push(142,c+128)
-					: (c>127&&a.push(142),a.push(c))
-		);
-	}
-	return a;
-};
 charset.JIS7.fromJ = function(array) {
 	var a=[],i,il=array.length,c,es=[0,1,2],e=es[0];
 	for(i=0;i<il;i++) {
 		(c=array[i])<128 ? ((e!=es[0] && (e=es[0],a.push(27,40,66))),a.push(c))
 			: 160<c&&c<224 ? ((e!=es[1] && (e=es[1],a.push(27,40,73))),a.push(c))
 				: (e!=es[2] && (e=es[2],a.push(27,36,66)),
-					c<P1||c>31499 ? a.push(33,38) : a.push((c>>7&127)+33,(array[++i]&127)+33))
+					c<P1||c>31499 ? a.push(33,38) : a.push((c>>>7&127)+33,(array[++i]&127)+33))
 	}
 	e!==es[0] && a.push(27,40,66); //ASCIIで終わっている必要がある
 	return a;
@@ -527,17 +476,17 @@ charset.JIS8.toU = function(array) {
 	}
 	return a;
 };
-charset.JIS8.fromE = function(array) {
+charset.JIS8.fromJ = function(array) {
 	var a=[],i,il=array.length,c,es=[0,1,2],e=es[0];
 	for(i=0;i<il;i++) {
-		(c=array[i])<128||(c===142&&(c=array[++i])) ? ((e!=es[0] && (e=es[0],a.push(27,40,66))),a.push(c))
+		(c=array[i])<128||160<c&&c<224 ? ((e!=es[0] && (e=es[0],a.push(27,40,66))),a.push(c))
 			: (e!==es[2] && (e=es[2],a.push(27,36,66)),
-				c<161 ? a.push(33,38) : a.push(c-128,array[++i]-128))
+				c<P1||c>31499 ? a.push(33,38) : a.push((c>>>7&127)+33,(array[++i]&127)+33))
 	}
 	e!==es[0] && a.push(27,40,66);
 	return a;
 };
-charset.JIS8.toE = charset.JIS7.toE;
+charset.JIS8.toJ = charset.JIS7.toJ;
 //http://ja.wikipedia.org/wiki/UTF-7 http://suika.fam.cx/~wakaba/wiki/sw/n/UTF-7
 //62のアルファベットと9の記号 ['(),-./:?] はそのまま表記する。
 // [\t\n\r !"#$%&*;<=>@[]^_`{|}]は表記してもいいし符号化してもいい(fromUでは符号化する)
@@ -642,9 +591,9 @@ charset.UTF8.fromU = function(array) {
 	var a=[],i,il=array.length,c;
 	for(i=0;i<il;i++) {
 		(c=array[i])<128 ? a.push(c)
-			: c<2048 ? a.push(c>>6|192,c&63|128)
-				: c<65536 ? a.push(c>>12|224,c>>6&63|128,c&63|128)
-					: a.push(c>>18|240,c>>12&63|128,c>>6&63|128,c&63|128)
+			: c<2048 ? a.push(c>>>6|192,c&63|128)
+				: c<65536 ? a.push(c>>>12|224,c>>>6&63|128,c&63|128)
+					: a.push(c>>>18|240,c>>>12&63|128,c>>>6&63|128,c&63|128)
 	}
 	return a;
 };
@@ -664,7 +613,7 @@ charset.UTF16LE.fromU = function(array) {
 	for(i=0;i<il;i++) {
 		//scalar                   	UTF-16
 		//000uuuuuxxxxxxyyyyyyyyyy 	110110wwwwxxxxxx 110111yyyyyyyyyy 	wwww = uuuuu - 1
-		(c=array[i])>65535&&(m=(c>>10)-64|55296,a.push(m&255,m>>>8),c=(c&1023|56320));
+		(c=array[i])>65535&&(m=(c>>>10)-64|55296,a.push(m&255,m>>>8),c=(c&1023|56320));
 		a.push(c&255,c>>>8);
 	}
 	return a;
@@ -682,7 +631,7 @@ charset.UTF16LE.toU = function(array) {
 charset.UTF16BE.fromU = function(array) {
 	var a=[],i,il=array.length,c,m;
 	for(i=0;i<il;i++) {
-		(c=array[i])>65535&&(m=(c>>10)-64|55296,a.push(m>>>8,m&255),c=(c&1023|56320));
+		(c=array[i])>65535&&(m=(c>>>10)-64|55296,a.push(m>>>8,m&255),c=(c&1023|56320));
 		a.push(c>>>8,c&255);
 	}
 	return a;
@@ -708,11 +657,10 @@ charset.UTF16 = charset.UTF16BE;
 */
 charset.convert_array = function(array, to, from) {
 	from=from||charset.Unicode;
-	!from.hasOwnProperty("toU") && (from=charset[from]);
-	!to.hasOwnProperty("fromU") && (to=charset[to]);
+	(!from.hasOwnProperty("toU")) && (from=charset[from]);
+	(!to.hasOwnProperty("fromU")) && (to=charset[to]);
 	if (to==from) {return array;}
 	if(from.hasOwnProperty("toJ") && to.hasOwnProperty("fromJ")) return to.fromJ(from.toJ(array));
-	if(from.hasOwnProperty("toE") && to.hasOwnProperty("fromE")) return to.fromE(from.toE(array));
 	return to.fromU(from.toU(array));
 }
 /**
@@ -724,11 +672,14 @@ charset.convert_array = function(array, to, from) {
  * @return {String} 変換後文字列
 */
 charset.convert = function(str, to, from) {
+	var array,parser;
 	from=from||charset.Unicode;
-	!from.hasOwnProperty("toU")&&(from=charset[from]);
-	!to.hasOwnProperty("fromU")&&(to=charset[to]);
+	(!from.hasOwnProperty("toU"))&&(from=charset[from]);
+	(!to.hasOwnProperty("fromU"))&&(to=charset[to]);
 	if (to==from) {return str;}
-	return charset.Unicode.stringify(charset.convert_array(charset.Unicode.parse(str),to,from));
+	parser = from===charset.Unicode ? from : enc.Text;
+	array = parser.parse(str);
+	return charset.Unicode.stringify(charset.convert_array(array, to, from));
 };
 /**
  * Unicode配列をBase64符号化する
@@ -737,7 +688,7 @@ charset.convert = function(str, to, from) {
  * @return {Array} Base64符号化された6bit配列
 */
 enc.Base64.fromU = function(array, to) {
-	!(to=to||'UTF8').hasOwnProperty("fromU")&&(to=charset[to]);
+	(!(to=to||'UTF8').hasOwnProperty("fromU"))&&(to=charset[to]);
 	return enc.Base64.fromB(to.fromU(array));
 };
 /**
@@ -747,7 +698,7 @@ enc.Base64.fromU = function(array, to) {
  * @return {Array} 24bit配列
 */
 enc.Base64.toU = function(array, from) {
-	!(from=from||'UTF8').hasOwnProperty("toU")&&(from=charset[from]);
+	(!(from=from||'UTF8').hasOwnProperty("toU"))&&(from=charset[from]);
 	return from.toU(enc.Base64.toB(array));
 };
 /**
@@ -782,14 +733,58 @@ enc.Base64.parse = function(str) {
 enc.Base64.stringify = function(array) {
 	return enc.Text.stringify(enc.Base64.fromB(array));
 };
-enc.Base64.encode = function(str, to) {
-	var b=enc.Text.stringify(enc.Base64.fromU(charset.Unicode.parse(str),to));
+/**
+ * 文字列をBase64エンコードする
+ * この関数はpaddingの=を追加する
+ * @param {String} str         変換する文字列
+ * @param {String|Object} cs1  strの文字セット default:Unicode
+ * @param {String|Object} cs2  cs1がUnicodeだった場合の変換先文字セット default:UTF8
+ * @return {String} Base64符号化された文字列
+ *
+ * @example
+ *  // JS文字列をUTF8としてBase64符号化
+ *  ECL.encodeBase64("文字列"); //=> "5paH5a2X5YiX==="
+ *  ECL.encodeBase64("文字列", "Unicode", "UTF8"); // 上記と同じ
+ * 
+ *  // SJIS文字列をエンコード(引数は省略不可)
+ *  ECL.encodeBase64(ECL.convert("文字列", "SJIS"), "SJIS"); //=> "lbaOmpfx==="
+ *
+*/
+enc.Base64.encode = function(str, cs1, cs2) {
+	var array,parser,b;
+	(!(cs1=cs1||'Unicode').hasOwnProperty("parse"))&&(cs1=charset[cs1]);
+	(!(cs2=cs2||'UTF8').hasOwnProperty("fromU"))&&(cs2=charset[cs2]);
+	parser = cs1===charset.Unicode ? cs1 : enc.Text;
+	array = parser.parse(str);
+	b=enc.Base64.stringify(cs1===charset.Unicode?cs2.fromU(array):array);
 	b+="===".substring(0,4-b.length%4);
 	return b;
 };
+/**
+ * Base64文字列をデコードする
+ * この関数はpaddingの=を削除する
+ * @param {String} str         Base64文字列
+ * @param {String|Object} from 元の文字セット指定すればJS文字列に変換する default:UTF8
+ * @return {String} デコードされた文字列
+ *
+ * @example
+ *  // Base64符号化されたUTF8文字列をJS文字列に
+ *  ECL.decodeBase64("5paH5a2X5YiX===");         //=> "文字列"
+ *  ECL.decodeBase64("5paH5a2X5YiX===", "UTF8"); //=> "文字列"
+ * 
+ *  // エンコードされたSJIS文字列
+ *  ECL.decodeBase64("lbaOmpfx===", ""); //=> "\x95\xb6\x8e\x9a\x97\xf1"
+ *  ECL.decodeBase64("lbaOmpfx===", "SJIS"); //=> "文字列"
+ *
+*/
 enc.Base64.decode = function(str, from) {
 	str=str.replace(/=+$/,'');
-	return charset.Unicode.stringify(enc.Base64.toU(enc.Text.parse(str),from));
+	var array = enc.Base64.parse(str)
+	if (from==="") {
+		return enc.Text.stringify(array);
+	}
+	(!(from=from||'UTF8').hasOwnProperty("toU"))&&(from=charset[from]);
+	return charset.Unicode.stringify(from.toU(array));
 };
 /**
  * enc.URI.escape
@@ -827,11 +822,11 @@ enc.URI.unescape = function(str) {
  * @return {String} encoded
 */
 enc.URI.encodeURIComponent = function(str, to) {
-	!(to||"UTF8").hasOwnProperty("fromU")&&(to=charset[to]);
+	(!(to||"UTF8").hasOwnProperty("fromU"))&&(to=charset[to]);
 	return enc.URI.escape(to.fromU(charset.Unicode.parse(str)));
 };
 enc.URI.decodeURIComponent = function(str, from) {
-	!(from||"UTF8").hasOwnProperty("toU")&&(from=charset[from]);
+	(!(from||"UTF8").hasOwnProperty("toU"))&&(from=charset[from]);
 	return charset.Unicode.stringify(from.toU(enc.URI.unescape(str)));
 };
 /**
@@ -911,7 +906,7 @@ charset.guess_array = function(array) {
 charset.guess = function(str) {
 	return charset.guess_array(enc.Text.parse(str));
 };
-var names=["SJIS","EUCJP","JIS7","JIS8","Unicode","UTF7","UTF8","UTF16LE","UTF16BE","MUTF7"],i,il=names.length,that=this;
+var names=["SJIS","EUCJP","JIS7","JIS8","Unicode","UTF7","UTF8","UTF16LE","UTF16BE","MUTF7"],i,il=names.length;
 ECL.charset=charset;
 for(i=0;i<il;i++) {
 	if (names[i]==='Unicode') {
@@ -920,8 +915,8 @@ for(i=0;i<il;i++) {
 	} else {
 		ECL["escape"+names[i]] = (function(fnc,cs){return function(str){return fnc(str,cs);};})(enc.URI.encodeURIComponent, charset[names[i]]);
 		ECL["unescape"+names[i]] = (function(fnc,cs){return function(str){return fnc(str,cs);};})(enc.URI.decodeURIComponent, charset[names[i]]);
-		ECL.charset[names[i]].parse = (function(fnc){return function(str){return fnc(charset.Unicode.parse(str));};})(charset[names[i]].toU);
-		ECL.charset[names[i]].stringify = (function(fnc){return function(array){return charset.Unicode.stringify(fnc(array));};})(charset[names[i]].fromU);
+		ECL.charset[names[i]].parse = (function(fnc){return function(str){return fnc(enc.Text.parse(str));};})(charset[names[i]].toU);
+		ECL.charset[names[i]].stringify = (function(fnc){return function(array){return enc.Text.stringify(fnc(array));};})(charset[names[i]].fromU);
 	}
 }
 ECL.convert = charset.convert;
