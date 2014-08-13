@@ -116,7 +116,7 @@ var ByteArray = {
 		var buf="", i=0, il=bytearray.length, tmp=[], len=0, map=ByteArray.b64map, four=[];
 		for(i=0; i<il; i++) {
 			tmp[len++] = bytearray[i];
-			if (len==3 || i>=il-1) {
+			if (len===3 || i>=il-1) {
 				four[0] = tmp[0]>>>2;
 				four[1] = (tmp[0] & 0x03)<<4 | (tmp[1]>>>4);
 				four[2] = (len<2) ? 64 : (((tmp[1] & 0x0f)<<2) | (tmp[2]>>>6));
@@ -166,7 +166,7 @@ var ByteArray = {
 		if (!map) {map = ByteArray.b85map;}
 		for(i=0; i<il; i++) {
 			tmp[len++] = bytearray[i];
-			if (len==4 || i>=il-1) {
+			if (len===4 || i>=il-1) {
 				bytes = 0;
 				for(j=0;j<len;j++) {
 					bytes += tmp[j] * radix32[j];
@@ -244,6 +244,15 @@ var ByteArray = {
 	},
 	toText : function(bytearray) {
 		return decodeURIComponent(escape(ByteArray.toAscii(bytearray)));
+	},
+	fromByteArray : function(array, to) {
+		if (to) {
+			return ByteArray["to"+to](array);
+		}
+		return array;
+	},
+	toByteArray : function(array) {
+		return array;
 	}
 };
 
@@ -280,8 +289,8 @@ var create_bytea = function(spec) {
 				['ByteArray', "array", "bytea"]
 			], amap = {},
 			i, j, mlen = methods.length, key, val,
-			array = spec["ByteArray"] || spec.array,
-			words = spec["WordArray"] || spec.words,
+			array = spec.ByteArray || spec.array,
+			words = spec.WordArray || spec.words,
 			sigBytes;
 	for(i=0; i<aliases.length; i++) {
 		for(j=0; j<aliases[i].length; j++) {
@@ -293,27 +302,30 @@ var create_bytea = function(spec) {
 		val = spec[j];
 		if (amap[key]) {break;}
 	}
-	if (val != null) {
+	if (val) {
 		that[amap[key]] = val;
 		array = ByteArray["from"+amap[key]](val);
 		that.toByteArray = function(){return array;};
 		sigBytes = array.length;
-		if (amap[key]=='WordArray') {
+		if (amap[key]==='WordArray') {
 			sigBytes = val.sigBytes;
 		}
 		that.bytes = sigBytes;
 		if (!that.ByteArray) {
 			that.ByteArray = that.array = array;
 		}
-		that.toWordArray = (that.WordArray!=null) ? (function(){
+		that.toWordArray = that.WordArray ? function(){
 			return that.WordArray;
-		}) : (function() {
+		} : function() {
 			return ByteArray.toWordArray(array, {"bytes":sigBytes});
-		});
+		};
 	}
 	
 	that.toString = function(key) {
 		if (typeof key === 'object' && key.stringify) { //CryptoJS.enc.*.stringify(words)
+			if (!that.words) {
+				that.WordArray = that.words = that.toWordArray();
+			}
 			return key.stringify(that.words);
 		}
 		key = amap[key];
