@@ -15,6 +15,16 @@
 
 <script type="text/javascript">
 //<![CDATA[
+// delete Text(En|De)coder if exists
+if (typeof TextEncoder !== 'undefined') {delete TextEncoder;}
+if (typeof TextDecoder !== 'undefined') {delete TextDecoder;}
+//]]>
+</script>
+<script type="text/javascript" src="./text-encoding/lib/encoding-indexes.js"></script>
+<script type="text/javascript" src="./text-encoding/lib/encoding.js"></script>
+
+<script type="text/javascript">
+//<![CDATA[
 var debug;
 
 (function() {
@@ -68,12 +78,12 @@ var debug;
  * SJIS,EUCJP,JIS7,JIS8,Unicode,UTF7,UTF8,UTF16LE
  */
 var CharsetNames = {
-// label    : ecl.js, encoding.js, ecl_array.js, ecl_2004.js
-	'SJIS'    : ['SJIS', 'SJIS', 'SJIS', 'SJIS2004'],
-	'EUC-JP'  : ['EUCJP', 'EUCJP', 'EUCJP', 'EUCJIS2004'],
-	'JIS'     : ['JIS7', 'JIS', 'JIS7', 'JIS2004'],
-	'UTF-8'   : ['UTF8', 'UTF8', 'UTF8', 'UTF8'],
-	'UNICODE' : ['Unicode', 'UNICODE', 'Unicode', 'Unicode']
+// label    : ecl.js, encoding.js, ecl_array.js, ecl_2004.js text-encoding
+	'SJIS'    : ['SJIS', 'SJIS', 'SJIS', 'SJIS2004', 'sjis'],
+	'EUC-JP'  : ['EUCJP', 'EUCJP', 'EUCJP', 'EUCJIS2004', 'euc-jp'],
+	'JIS'     : ['JIS7', 'JIS', 'JIS7', 'JIS2004', 'iso-2022-jp'],
+	'UTF-8'   : ['UTF8', 'UTF8', 'UTF8', 'UTF8', 'utf-8'],
+	'UNICODE' : ['Unicode', 'UNICODE', 'Unicode', 'Unicode', 'Unicode']
 }
 var convert = function(text, toCharset, fromCharset, dumptypeTo, dumptypeFrom) {
 	var array,out_array,enclib;
@@ -111,6 +121,16 @@ var convert_with = function(enclib, text, toCharset, fromCharset, dumptypeTo, du
 		//out_array = ECL["to"+to+"Array"](ECL["from"+from+"Array"](in_array));
 		//out_array = ECL.charset[to].parse(ECL.charset[from].stringify(in_array));
 		out_array = ECL.convert_array(in_array, to, from);
+	} else if (enclib == 4) {
+		if (from==='Unicode') {
+			out_array = new TextEncoder(to,{NONSTANDARD_allowLegacyEncoding:true}).encode(text);
+		} else {
+			text = new TextDecoder(from).decode(new Uint8Array(Utils.ByteArray.fromBinary(text)));
+			if (to === 'Unicode') {
+				return text;
+			}
+			out_array = new TextEncoder(to,{NONSTANDARD_allowLegacyEncoding:true}).encode(text);
+		}
 	} else if (enclib==10) { // native
 		if ((fromCharset=='UNICODE' || fromCharset=='UTF-8') && (toCharset=='UNICODE' || toCharset=='UTF-8')) {
 			text = fromCharset=='UNICODE' ? unescape(encodeURIComponent(text)) : decodeURIComponent(escape(text));
@@ -294,12 +314,13 @@ if (str == utf16str) {alert(true);} <span class="comment">//=&gt; true</span>
 </pre></blockquote>
 <p>
 とすることで UTF-16&lt;=&gt;UTF-8 の変換は出来るが、その他の文字コードは変換テーブルを用意する必要がある。
-Shift_JIS(MS932), EUC-JP, UTF-8, JIS(iso-2022-jp)に対応したライブラリを2つ見つけたので検証する。
+Shift_JIS(MS932), EUC-JP, UTF-8, JIS(iso-2022-jp)に対応したライブラリを見つけたので検証する。
 </p>
 
 <ol>
 <li>Encoding.js - Converts character encoding. <a href="http://polygon-planet-log.blogspot.jp/2012/04/javascript.html">http://polygon-planet-log.blogspot.jp/2012/04/javascript.html</a></li>
 <li> Escape Codec Library: ecl.js (Ver.041208) <a href="http://www.junoe.jp/downloads/itoh/enc_js.shtml">http://www.junoe.jp/downloads/itoh/enc_js.shtml</a> または <a href="http://www.vector.co.jp/soft/other/java/se342855.html">http://www.vector.co.jp/soft/other/java/se342855.html</a></li>
+<li>inexorabletash/text-encoding - Polyfill for the Encoding Living Standard's API. <a href="https://github.com/inexorabletash/text-encoding">https://github.com/inexorabletash/text-encoding</a></li>
 </ol>
 
 <h2>検証</h2>
@@ -506,6 +527,7 @@ UNICODEエスケープだけが出来ないので注意。
 	<label><input type="radio" name="enclib" value="0">ecl.js</label>
 	<label><input type="radio" name="enclib" value="2">ecl_array.js</label>
 	<label><input type="radio" name="enclib" value="3">ecl_2004.js</label>
+	<label><input type="radio" name="enclib" value="4">text-encoding</label>
 </dd>
 
 <dt>繰り返し数</dt>

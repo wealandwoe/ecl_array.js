@@ -866,6 +866,46 @@ enc.Unicode.unescape = function(str) {
 	return a;
 };
 /**
+ * enc.TextEncoder class
+ * Encoding StandardのTextEncoderのように振る舞うクラス
+ * @see https://encoding.spec.whatwg.org/
+ * @see https://developer.mozilla.org/ja/docs/Web/API/TextEncoder
+ */
+enc.TextEncoder = function(encoding) {
+	var en, map = {'UTF8':[], 'UTF16LE':['UTF16'], 'UTF16BE':[], 'SJIS':['SHIFTJIS','WINDOWS31J','XSJIS'], 'EUCJP':['XEUCJP'], 'JIS7':['iso2022jp']}, m={}, x, i;
+	if (!encoding) {encoding = 'UTF-8';}
+	for(x in map) {
+		m[x] = x;
+		for(i=0; i<map[x].length; i++) {m[map[x][i]] = x;}
+	}
+	en = m[encoding.toUpperCase().replace(/[^A-Z0-9]/g,'')];
+	if (!en) {throw new TypeError(encoding+" is not supported encoding");}
+	this.encoding = encoding;
+	this.encode = function(text) {
+		return new Uint8Array(charset[en].fromU(enc.Text.parse(text)));
+	};
+};
+/**
+ * enc.TextDecoder class
+ * Encoding StandardのTextDecoderのように振る舞うクラス
+ * @see https://encoding.spec.whatwg.org/
+ * @see https://developer.mozilla.org/ja/docs/Web/API/TextEncoder
+ */
+enc.TextDecoder = function(encoding) {
+	var en, map = {'UTF8':[], 'UTF16LE':['UTF16'], 'UTF16BE':[], 'SJIS':['SHIFTJIS','WINDOWS31J','XSJIS'], 'EUCJP':['XEUCJP'], 'JIS7':['iso2022jp']}, m={}, x, i;
+	if (!encoding) {encoding = 'UTF-8';}
+	for(x in map) {
+		m[x] = x;
+		for(i=0; i<map[x].length; i++) {m[map[x][i]] = x;}
+	}
+	en = m[encoding.toUpperCase().replace(/[^A-Z0-9]/g,'')];
+	if (!en) {throw new TypeError(encoding+" is not supported encoding");}
+	this.encoding = encoding;
+	this.decode = function(u8array) {
+		return enc.Text.stringify(charset[en].toU(u8array));
+	};
+};
+/**
  * 配列から文字コードを推測する
  * ecl.jsのGetEscapeCodeType(str)に丸投げしている
 */
@@ -928,6 +968,8 @@ ECL.encodeURIComponent = enc.URI.encodeURIComponent;
 ECL.decodeURIComponent = enc.URI.decodeURIComponent;
 ECL.encodeBase64 = enc.Base64.encode;
 ECL.decodeBase64 = enc.Base64.decode;
+ECL.TextEncoder = enc.TextEncoder;
+ECL.TextDecoder = enc.TextDecoder;
 //ECL.getEscapeCodeType = GetEscapeCodeType;
 ECL.JCT11280 = JCT11280;
 ECL.JCT8836 = JCT8836;
