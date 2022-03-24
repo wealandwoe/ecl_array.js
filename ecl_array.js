@@ -213,7 +213,7 @@ var JISX0208=Function(
 //var JCT8836=(JCT11280=JISX0208.s).substring(0,8836);
 
 /**
- * U2CP,CP2U Unicode番号とJIS番号の対応テーブル
+ * U2CP,U2SJCP,CP2U Unicode番号とJIS番号の対応テーブル
  *   Unicode番号はスカラ値、JIS番号は区点位置(1面、1～119区、1～94点)を1+7+7bitの15bit整数にしたものを用いる。
  *
  *   JCT11280はWindows-31Jのテーブルで、重複登録された漢字がある。
@@ -225,17 +225,19 @@ var JISX0208=Function(
  *   言い換えると,1～88区までは先に現れたコードポイントを優先し、89～92区のNEC選定IBM拡張文字は利用せず
  *   代わりに115～119区に現れるIBM拡張文字のコードポイントを利用する
  *   
+ *   U2SJCPはSJIS向けの対応テーブル、U2CPはSJIS以外(EUCJP,JIS7,JIS8)向け
  * @see http://ja.wikipedia.org/wiki/Microsoft%E3%82%B3%E3%83%BC%E3%83%89%E3%83%9A%E3%83%BC%E3%82%B8932#Windows-31J_.E3.81.AB.E9.87.8D.E8.A4.87.E7.99.BB.E9.8C.B2.E3.81.95.E3.82.8C.E3.81.9F.E3.82.B3.E3.83.BC.E3.83.89
 */
-var U2CP={},CP2U={},P1=1<<14;
+var U2CP={},U2SJCP={},U2CP={},CP2U={},P1=1<<14;
 (function(array) {
 	var sc,cp,i,il=array.length;
 	for(i=0;i<il;i++) {
 		sc = array[i];
-		if(sc===12539&&i>5){continue;}
+		if(sc===12539&&i>5){continue;} // 5番目以降の "・" は無効
 		cp = P1|(i/94|0)<<7|i%94;
 		CP2U[cp] = sc;
-		if((i<8272||10715<i) && U2CP[sc]===undefined) {U2CP[sc] = cp;}
+		if ((i < 8272 || 10715 < i) && !U2SJCP[sc]) {U2SJCP[sc] = cp;} // 88区以下 or 115区以上 で 未定義なら U2SJCP更新
+		if (i < 8836 && !U2CP[sc]) {U2CP[sc] = cp;} // 94区以下で未定義なら U2CP 更新
 	}
 })(JISX0208.array);
 
@@ -299,17 +301,10 @@ charset.SJIS.fromU = function(array) {
 		c=array[i];
 		c<128 ? a.push(c) : 
 			65376<c&&c<65440 ? a.push(c-65216) : 
-/*
-				(c=JCT11280.indexOf((s=String.fromCharCode(c))))<0 ? a.push(129,69) : a.push(
-					(m=((c<8272?c:(c=JCT11280.lastIndexOf(s)))-(c%=188))/188)<31 ? m+129 : m+193, //mは(区-1)/2
+				(c=U2SJCP[c]||-1)<0||c>31499 ? a.push(129,69) : a.push( // 変換できない字は "・" [129,69] に置き換える(31499=119区12点)
+					(m=(c>>>7&127),c=(c&127)+(m&1)*94,m=m>>>1)<31 ? m+129 : m+193, //mは(区-1)/2
 					c+=c<63?64:65
 				)
-*/
-				(c=U2CP[c]||-1)<0||c>31499 ? a.push(129,69) : a.push(
-					(m=(c>>>7&127),c=(c&127)+(m&1)*94,m=m>>>1)<31 ? m+129 : m+193,
-					c+=c<63?64:65
-				)
-
 	}
 	return a;
 };
@@ -319,14 +314,36 @@ charset.SJIS.fromU = function(array) {
  * @return {Array}  Unicodeの24bit配列
 */
 charset.SJIS.toU = function(array) {
-	var a=[],i,il=array.length,c;
+	var a=[],i,il=array.length,r=0xFFFD,c,d;
+	for(i=0;i<il;i++) {
+		c = array[i];
+		if (c < 0x80) { //ASCII
+			a.push(c);
+		} else if (0xA0 < c && c < 0xE0) {
+			a.push(c + 0xFEC0); //ｶﾅ
+		} else if (0x80 < c && c < 0xA0 || 0xDF < c && c < 0xFD) { //2Byte文字の1Byte目
+			c -= c < 0xA0 ? 0x81 : 0xC1;
+			d = array[++i];
+			if (d < 0x40 || d === 0x7F || d > 0xFC) { // 2Byte目として不正
+				c = r;
+			} else {
+				d -= d < 0x7F ? 0x40 : d < 0x9F ? 0x41 : 0x1F;
+				c = CP2U[P1 | c << 8 | d];
+			}
+			a.push(c);
+		} else { // 1Byte目として不正
+			a.push(r);
+		}
+	}
+/*
+	// 以下の処理では不正なバイト出現時の処理がない
 	for(i=0;i<il;i++) {
 		c = array[i];
 		(c<128||160<c&&c<224) 
 			? a.push(160<c?c+65216:c) //ASCII+ｶﾅ
-//			: a.push( JCT11280.charAt((c<160?c-129:c-193)*188+(c=array[++i],c<127?c-64:c-65)).charCodeAt(0) )
 			: a.push( CP2U[P1|(c<160?c-129:c-193)<<8|(c=array[++i],c<127?c-64:c<159?c-65:c-31)] )
 	}
+*/
 	return a;
 };
 //http://www.unixuser.org/~euske/doc/kanjicode/
@@ -363,7 +380,7 @@ charset.EUCJP.fromU = function(array) {
 				(c=JCT8836.indexOf(String.fromCharCode(c)))<0 ? a.push(161,166) : (
 					a.push((c-(c%=94))/94+161, c+161)
 */
-				(c=U2CP[c]||-1)<0||c>31499 ? a.push(161,166) : (
+				(c=U2CP[c]||-1)<0||c>28215 ? a.push(161,166) : ( // "・"[161,166], 28215=92区94点
 					a.push((c>>>7&127)+161, (c&127)+161)
 				)
 	}
@@ -406,7 +423,7 @@ charset.JIS7.fromU = function(array) {
 			: 65376<c&&c<65440 ? ((e!=es[1] && (e=es[1],a.push(27,40,73))),a.push(c-65344))
 				: (e!=es[2] && (e=es[2],a.push(27,36,66)),
 //					(c=JCT8836.indexOf(String.fromCharCode(c)))<0 ? a.push(33,38) : a.push((c-(c%=94))/94+33,c+33))
-						(c=U2CP[c]||-1)<0||c>31499 ? a.push(33,38) : a.push((c>>>7&127)+33,(c&127)+33))
+					(c=U2CP[c]||-1)<0||c>28215 ? a.push(33,38) : a.push((c>>>7&127)+33,(c&127)+33)) // "・"[33,38], 28215=92区94点
 	}
 	e!==es[0] && a.push(27,40,66); //ASCIIで終わっている必要がある
 	return a;
@@ -457,7 +474,7 @@ charset.JIS8.fromU = function(array) {
 		(c=array[i])<128||65376<c&&c<65440 ? ((e!=es[0] && (e=es[0],a.push(27,40,66))),a.push(c<128?c:c-65216))
 			: (e!==es[2] && (e=es[2],a.push(27,36,66)),
 //				(c=JCT8836.indexOf(String.fromCharCode(c)))<0 ? a.push(33,38) : a.push((c-(c%=94))/94+33,c+33))
-					(c=U2CP[c]||-1)<0||c>31499 ? a.push(33,38) : a.push((c>>>7&127)+33,(c&127)+33))
+					(c=U2CP[c]||-1)<0||c>28215 ? a.push(33,38) : a.push((c>>>7&127)+33,(c&127)+33))
 	}
 	e!==es[0] && a.push(27,40,66);
 	return a;
@@ -598,14 +615,40 @@ charset.UTF8.fromU = function(array) {
 	return a;
 };
 charset.UTF8.toU = function(array) {
-	var a=[],i=0,il=array.length,c;
+	var a=[],i=0,il=array.length,
+			r=65533, // U+FFFD REPLACEMENT CHARACTER
+			c,d;
 	array[0]===239&&array[1]===187&&array[2]===191&&(i=3);//BOM
-	for(;i<il;i++) a.push(
-		(c=array[i])<128 ? c
-			: c<224 ? (c&31)<<6|array[++i]&63
+	for(;i<il;i++) {
+		c = array[i];
+		if (c < 128) {        // 7bit  00..7F
+			a.push(c);
+		} else if (c < 194) { // malformed data  80..C1
+			a.push(r);
+		} else if (c < 224) { // 11bit  C2..DF, 80..BF
+			d = array[++i];
+			a.push(d >>> 6 === 2 ? (c&31)<<6 | d&63 : r);
+		} else if (c < 240) { // 16bit  E0..EF, 80..BF, 80..BF
+			d = [array[++i], array[++i]];
+			a.push(d[0] >>> 6 === 2 && d[1] >>> 6 === 2 ?
+					((c&15)<<6 | d[0]&63)<<6 | d[1]&63 : r);
+		} else if (c < 245) { // 21bit  F0..F4, 80..BF, 80..BF, 80..BF
+			d = [array[++i], array[++i], array[++i]];
+			a.push(d[0] >>> 6 === 2 && d[1] >>> 6 === 2 && d[2] >>> 6 === 2 ?
+					(((c&7)<<6 | d[0]&63)<<6 | d[1]&63)<<6 | d[2]&63 : r);
+		} else {              // malformed data  F5..FF
+			a.push(r);
+		}
+		/*
+		// 以下の処理では 2byte目以降のチェックがない(80:0b10000000 - BF:0b10111111)
+		a.push((c=array[i])<128 ? c
+				: c<194 ? r
+				: c<224 ? (c&31)<<6|array[++i]&63
 				: c<240 ? ((c&15)<<6|array[++i]&63)<<6|array[++i]&63
-					: (((c&7)<<6|array[++i]&63)<<6|array[++i]&63)<<6|array[++i]&63
-	);
+				: c<245 ? (((c&7)<<6|array[++i]&63)<<6|array[++i]&63)<<6|array[++i]&63)
+				: r;
+		*/
+	}
 	return a;
 };
 charset.UTF16LE.fromU = function(array) {
@@ -971,9 +1014,9 @@ ECL.decodeBase64 = enc.Base64.decode;
 ECL.TextEncoder = enc.TextEncoder;
 ECL.TextDecoder = enc.TextDecoder;
 //ECL.getEscapeCodeType = GetEscapeCodeType;
-ECL.JCT11280 = JCT11280;
-ECL.JCT8836 = JCT8836;
+//ECL.JCT11280 = JCT11280;
+//ECL.JCT8836 = JCT8836;
 
-ECL.JISX0208={"U2CP":U2CP, "CP2U":CP2U};
+ECL.JISX0208={"U2CP":U2CP, "U2SJCP":U2SJCP, "CP2U":CP2U};
 
 })();
